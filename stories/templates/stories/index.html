@@ -214,11 +214,44 @@
       margin-bottom: 36px;
     }
 
+    .chapter-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
     .chapter-title {
       font-size: 17px;
       font-weight: 700;
-      margin-bottom: 12px;
       color: #1a1a1a;
+    }
+
+    .copy-btn {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: #7c6f64;
+      background: #f5f0eb;
+      border: 1px solid #ddd6cc;
+      border-radius: 4px;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+
+    .copy-btn:hover {
+      background: #ebe4dc;
+      color: #1a1a1a;
+    }
+
+    .copy-btn.copied {
+      background: #e6f4ea;
+      color: #1e7e34;
+      border-color: #b7dfbf;
     }
 
     .chapter-body {
@@ -522,14 +555,17 @@
 
             if (planChapters.length) {
               /* Render from the plan, injecting full text where available */
-              planChapters.forEach(ch => {
+              planChapters.forEach((ch, idx) => {
                 const num = ch.chapter_number;
+                const fullText = chapterTextMap[num] || "";
                 html += `<div class="chapter">
-                  <div class="chapter-title">Chapter ${num}: ${esc(ch.title)}</div>`;
+                  <div class="chapter-heading">
+                    <div class="chapter-title">Chapter ${num}: ${esc(ch.title)}</div>
+                    ${fullText ? `<button class="copy-btn" onclick="copyChapter(this, ${idx})">Copy</button>` : ""}
+                  </div>`;
 
-                const fullText = chapterTextMap[num];
                 if (fullText) {
-                  html += `<div class="chapter-body">${esc(fullText)}</div>`;
+                  html += `<div class="chapter-body" data-chapter-idx="${idx}">${esc(fullText)}</div>`;
                 }
 
                 /* Always show the plan details */
@@ -564,10 +600,13 @@
               });
             } else {
               /* No plan chapters — render from ms.chapters directly */
-              ms.chapters.forEach(ch => {
+              ms.chapters.forEach((ch, idx) => {
                 html += `<div class="chapter">
-                  <div class="chapter-title">Chapter ${ch.chapter_number}</div>
-                  <div class="chapter-body">${esc(ch.text)}</div>
+                  <div class="chapter-heading">
+                    <div class="chapter-title">Chapter ${ch.chapter_number}</div>
+                    <button class="copy-btn" onclick="copyChapter(this, ${idx})">Copy</button>
+                  </div>
+                  <div class="chapter-body" data-chapter-idx="${idx}">${esc(ch.text)}</div>
                 </div>`;
               });
             }
@@ -612,6 +651,21 @@
       const d = document.createElement("div");
       d.textContent = String(str);
       return d.innerHTML;
+    }
+
+    /* Copy chapter text to clipboard */
+    function copyChapter(btn, idx) {
+      const body = document.querySelector(`[data-chapter-idx="${idx}"]`);
+      if (!body) return;
+      const text = body.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          btn.textContent = "Copy";
+          btn.classList.remove("copied");
+        }, 2000);
+      });
     }
 
     /* ── Boot ────────────────────────────────────────────────────── */
