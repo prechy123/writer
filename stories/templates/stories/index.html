@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Writer &mdash; Stories</title>
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Georgia", "Times New Roman", serif;
+      background: #f5f0eb;
+      color: #2c2c2c;
+      min-height: 100vh;
+    }
+
+    /* ── Document page wrapper ─────────────────────────────────────── */
+    .page {
+      max-width: 780px;
+      margin: 40px auto;
+      background: #fff;
+      border: 1px solid #d6d0c8;
+      border-radius: 3px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
+      padding: 56px 64px;
+      min-height: 80vh;
+    }
+
+    @media (max-width: 840px) {
+      .page {
+        margin: 16px;
+        padding: 32px 24px;
+      }
+    }
+
+    /* ── Typography ────────────────────────────────────────────────── */
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #1a1a1a;
+      letter-spacing: -.3px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 36px;
+      border-bottom: 1px solid #e8e3dc;
+      padding-bottom: 20px;
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #1a1a1a;
+    }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin: 28px 0 8px;
+      color: #333;
+    }
+
+    p,
+    li {
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    /* ── Status badges ─────────────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+
+    .badge-completed {
+      background: #e6f4ea;
+      color: #1e7e34;
+    }
+
+    .badge-running {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .badge-pending {
+      background: #e8e3dc;
+      color: #6c6c6c;
+    }
+
+    .badge-failed {
+      background: #f8d7da;
+      color: #a71d2a;
+    }
+
+    /* ── Story list ────────────────────────────────────────────────── */
+    .story-list {
+      list-style: none;
+    }
+
+    .story-list li {
+      padding: 16px 0;
+      border-bottom: 1px solid #eeebe6;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    .story-list li:hover {
+      background: #fdfbf8;
+      margin: 0 -64px;
+      padding: 16px 64px;
+    }
+
+    @media (max-width: 840px) {
+      .story-list li:hover {
+        margin: 0 -24px;
+        padding: 16px 24px;
+      }
+    }
+
+    .story-list li:last-child {
+      border-bottom: none;
+    }
+
+    .story-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .story-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .story-meta {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-top: 4px;
+    }
+
+    /* ── Detail page ───────────────────────────────────────────────── */
+    .back-link {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: #7c6f64;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 24px;
+    }
+
+    .back-link:hover {
+      color: #1a1a1a;
+    }
+
+    .detail-header {
+      border-bottom: 1px solid #e8e3dc;
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+
+    .detail-description {
+      font-style: italic;
+      color: #555;
+      margin: 10px 0 12px;
+    }
+
+    .detail-meta {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: #999;
+    }
+
+    .detail-meta span {
+      margin-right: 18px;
+    }
+
+    /* ── Manuscript sections ────────────────────────────────────────── */
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section-label {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    .chapter {
+      margin-bottom: 36px;
+    }
+
+    .chapter-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #1a1a1a;
+    }
+
+    .chapter-body {
+      white-space: pre-wrap;
+      line-height: 1.8;
+      font-size: 15px;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      list-style: none;
+    }
+
+    .tag {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      background: #f0ece6;
+      color: #5a5149;
+      padding: 3px 10px;
+      border-radius: 10px;
+    }
+
+    .character-card {
+      background: #faf8f5;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+
+    .character-card strong {
+      font-size: 15px;
+    }
+
+    .character-card .role {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #888;
+      margin-left: 8px;
+    }
+
+    .character-card p {
+      margin-top: 6px;
+      font-size: 14px;
+      color: #555;
+    }
+
+    /* ── Utilities ──────────────────────────────────────────────────── */
+    .hidden {
+      display: none;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 0;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    .error {
+      text-align: center;
+      padding: 60px 0;
+      color: #a71d2a;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 60px 0;
+      color: #aaa;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e8e3dc;
+      margin: 32px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       PAGE 1  —  Story List
+       ═══════════════════════════════════════════════════════════════ -->
+  <div id="page-list" class="page">
+    <h1>Stories</h1>
+    <p class="subtitle">Select a story to read its full details.</p>
+
+    <div id="list-loading" class="loading">Loading stories&hellip;</div>
+    <div id="list-error" class="error hidden"></div>
+    <div id="list-empty" class="empty hidden">No stories yet.</div>
+    <ul id="story-list" class="story-list hidden"></ul>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       PAGE 2  —  Story Detail
+       ═══════════════════════════════════════════════════════════════ -->
+  <div id="page-detail" class="page hidden">
+    <a class="back-link" onclick="showList()">&larr; Back to all stories</a>
+
+    <div id="detail-loading" class="loading">Loading story&hellip;</div>
+    <div id="detail-error" class="error hidden"></div>
+    <div id="detail-content" class="hidden">
+      <!-- filled dynamically -->
+    </div>
+  </div>
+
+  <script>
+    const API = "/api";
+
+    /* ── Helpers ─────────────────────────────────────────────────── */
+    function badge(status) {
+      const cls = {
+        completed: "badge-completed",
+        running: "badge-running",
+        pending: "badge-pending",
+        failed: "badge-failed"
+      } [status] || "badge-pending";
+      return `<span class="badge ${cls}">${status}</span>`;
+    }
+
+    function fmtDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }) +
+        " " + d.toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+    }
+
+    /* ── Navigation ─────────────────────────────────────────────── */
+    function showList() {
+      document.getElementById("page-list").classList.remove("hidden");
+      document.getElementById("page-detail").classList.add("hidden");
+      history.pushState(null, "", "#");
+    }
+
+    function showDetail(storyId) {
+      document.getElementById("page-list").classList.add("hidden");
+      document.getElementById("page-detail").classList.remove("hidden");
+      history.pushState(null, "", "#story=" + storyId);
+      loadDetail(storyId);
+    }
+
+    /* ── Load story list ────────────────────────────────────────── */
+    async function loadList() {
+      const $loading = document.getElementById("list-loading");
+      const $error = document.getElementById("list-error");
+      const $empty = document.getElementById("list-empty");
+      const $list = document.getElementById("story-list");
+
+      $loading.classList.remove("hidden");
+      $error.classList.add("hidden");
+      $empty.classList.add("hidden");
+      $list.classList.add("hidden");
+
+      try {
+        const res = await fetch(API + "/stories/");
+        if (!res.ok) throw new Error("Server returned " + res.status);
+        const data = await res.json();
+
+        $loading.classList.add("hidden");
+
+        if (!data.length) {
+          $empty.classList.remove("hidden");
+          return;
+        }
+
+        $list.innerHTML = data.map(s => `
+          <li onclick="showDetail('${s.story_id}')">
+            <div class="story-row">
+              <span class="story-title">${esc(s.title)}</span>
+              ${badge(s.status)}
+            </div>
+            <div class="story-meta">
+              ${s.num_chapters} chapter${s.num_chapters===1?"":"s"}
+              &middot; Created ${fmtDate(s.created_at)}
+              &middot; Updated ${fmtDate(s.updated_at)}
+            </div>
+          </li>
+        `).join("");
+        $list.classList.remove("hidden");
+      } catch (err) {
+        $loading.classList.add("hidden");
+        $error.textContent = "Failed to load stories: " + err.message;
+        $error.classList.remove("hidden");
+      }
+    }
+
+    /* ── Load story detail ──────────────────────────────────────── */
+    async function loadDetail(storyId) {
+      const $loading = document.getElementById("detail-loading");
+      const $error = document.getElementById("detail-error");
+      const $content = document.getElementById("detail-content");
+
+      $loading.classList.remove("hidden");
+      $error.classList.add("hidden");
+      $content.classList.add("hidden");
+
+      try {
+        const res = await fetch(API + "/stories/" + storyId + "/");
+        if (!res.ok) throw new Error("Server returned " + res.status);
+        const s = await res.json();
+
+        $loading.classList.add("hidden");
+
+        let html = "";
+
+        /* ── Header ──────────────────────────────────────────── */
+        html += `<div class="detail-header">
+          <h2>${esc(s.title)}</h2>
+          <p class="detail-description">${esc(s.description)}</p>
+          <div class="detail-meta">
+            ${badge(s.status)}
+            <span>${s.num_chapters} chapter${s.num_chapters===1?"":"s"}</span>
+            <span>${s.chapters_completed} completed</span>
+            <span>Created ${fmtDate(s.created_at)}</span>
+          </div>
+        </div>`;
+
+        const ms = s.final_manuscript;
+
+        if (!ms) {
+          html += `<p class="empty" style="padding:40px 0">
+            ${s.status === "completed" ? "No manuscript data available." :
+              s.status === "failed"    ? "Story generation failed." :
+              "Story is still being generated&hellip;"}
+          </p>`;
+        } else {
+          const plan = ms.story_plan || {};
+
+          /* ── Overview ─────────────────────────────────────── */
+          if (plan.genre || plan.setting || (plan.themes && plan.themes.length)) {
+            html += `<div class="section">
+              <div class="section-label">Overview</div>`;
+            if (plan.genre) html += `<p><strong>Genre:</strong> ${esc(plan.genre)}</p>`;
+            if (plan.setting) html += `<p><strong>Setting:</strong> ${esc(plan.setting)}</p>`;
+            if (plan.themes && plan.themes.length) {
+              html += `<ul class="tag-list" style="margin-top:8px">
+                ${plan.themes.map(t => `<li class="tag">${esc(t)}</li>`).join("")}
+              </ul>`;
+            }
+            html += `</div>`;
+          }
+
+          /* ── Plot summary ─────────────────────────────────── */
+          if (plan.plot_summary) {
+            html += `<div class="section">
+              <div class="section-label">Plot Summary</div>
+              <p>${esc(plan.plot_summary)}</p>
+            </div>`;
+          }
+
+          /* ── Initial synopsis ─────────────────────────────── */
+          if (plan.initial_summary) {
+            html += `<div class="section">
+              <div class="section-label">Synopsis</div>
+              <p>${esc(plan.initial_summary)}</p>
+            </div>`;
+          }
+
+          /* ── Characters ───────────────────────────────────── */
+          if (plan.characters && plan.characters.length) {
+            html += `<div class="section">
+              <div class="section-label">Characters</div>
+              ${plan.characters.map(c => `
+                <div class="character-card">
+                  <strong>${esc(c.name)}</strong><span class="role">${esc(c.role)}</span>
+                  <p>${esc(c.description)}</p>
+                  ${c.motivations && c.motivations.length ? `<p style="margin-top:4px;font-size:13px;color:#666"><strong>Motivations:</strong> ${c.motivations.map(m => esc(m)).join(", ")}</p>` : ""}
+                  ${c.arc ? `<p style="margin-top:4px;font-style:italic;font-size:13px;color:#777">Arc: ${esc(c.arc)}</p>` : ""}
+                </div>
+              `).join("")}
+            </div>`;
+          }
+
+          html += `<hr class="divider">`;
+
+          /* ── Build a lookup for full chapter text from ms.chapters ── */
+          const chapterTextMap = {};
+          if (ms.chapters && ms.chapters.length) {
+            ms.chapters.forEach(ch => {
+              if (ch.chapter_number && ch.text) {
+                chapterTextMap[ch.chapter_number] = ch.text;
+              }
+            });
+          }
+
+          /* ── Chapters (plan + full text) ──────────────────── */
+          const planChapters = (plan.chapters && plan.chapters.length) ? plan.chapters : [];
+
+          if (planChapters.length || Object.keys(chapterTextMap).length) {
+            html += `<div class="section"><div class="section-label">Chapters</div>`;
+
+            if (planChapters.length) {
+              /* Render from the plan, injecting full text where available */
+              planChapters.forEach(ch => {
+                const num = ch.chapter_number;
+                html += `<div class="chapter">
+                  <div class="chapter-title">Chapter ${num}: ${esc(ch.title)}</div>`;
+
+                const fullText = chapterTextMap[num];
+                if (fullText) {
+                  html += `<div class="chapter-body">${esc(fullText)}</div>`;
+                }
+
+                /* Always show the plan details */
+                if (ch.summary) {
+                  html += `<div class="section" style="margin-top:16px">
+                    <div class="section-label">Summary</div>
+                    <p>${esc(ch.summary)}</p>
+                  </div>`;
+                }
+                if (ch.key_events && ch.key_events.length) {
+                  html += `<div class="section" style="margin-top:10px">
+                    <div class="section-label">Key Events</div>
+                    <ul style="padding-left:20px">
+                      ${ch.key_events.map(e => `<li>${esc(e)}</li>`).join("")}
+                    </ul>
+                  </div>`;
+                }
+                if (ch.characters_involved && ch.characters_involved.length) {
+                  html += `<div class="section" style="margin-top:10px">
+                    <div class="section-label">Characters Involved</div>
+                    <ul class="tag-list">
+                      ${ch.characters_involved.map(c => `<li class="tag">${esc(c)}</li>`).join("")}
+                    </ul>
+                  </div>`;
+                }
+                if (ch.emotional_arc) {
+                  html += `<p style="margin-top:8px;font-style:italic;font-size:13px;color:#888">
+                    Emotional arc: ${esc(ch.emotional_arc)}
+                  </p>`;
+                }
+                html += `</div>`;
+              });
+            } else {
+              /* No plan chapters — render from ms.chapters directly */
+              ms.chapters.forEach(ch => {
+                html += `<div class="chapter">
+                  <div class="chapter-title">Chapter ${ch.chapter_number}</div>
+                  <div class="chapter-body">${esc(ch.text)}</div>
+                </div>`;
+              });
+            }
+
+            html += `</div>`;
+          }
+
+          /* ── Publisher notes ──────────────────────────────── */
+          if (ms.publisher_notes) {
+            html += `<hr class="divider">
+            <div class="section">
+              <div class="section-label">Publisher Notes</div>
+              <p>${esc(ms.publisher_notes)}</p>
+            </div>`;
+          }
+
+          /* ── Running summary ─────────────────────────────── */
+          if (ms.running_summary) {
+            html += `<div class="section">
+              <div class="section-label">Running Summary</div>
+              <p>${esc(ms.running_summary)}</p>
+            </div>`;
+          }
+        }
+
+        $content.innerHTML = html;
+        $content.classList.remove("hidden");
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth"
+        });
+      } catch (err) {
+        $loading.classList.add("hidden");
+        $error.textContent = "Failed to load story: " + err.message;
+        $error.classList.remove("hidden");
+      }
+    }
+
+    /* Minimal HTML-escape */
+    function esc(str) {
+      if (!str) return "";
+      const d = document.createElement("div");
+      d.textContent = String(str);
+      return d.innerHTML;
+    }
+
+    /* ── Boot ────────────────────────────────────────────────────── */
+    window.addEventListener("popstate", () => {
+      const h = location.hash;
+      if (h.startsWith("#story=")) {
+        const id = h.slice(7);
+        document.getElementById("page-list").classList.add("hidden");
+        document.getElementById("page-detail").classList.remove("hidden");
+        loadDetail(id);
+      } else {
+        showList();
+      }
+    });
+
+    (function boot() {
+      const h = location.hash;
+      if (h.startsWith("#story=")) {
+        document.getElementById("page-list").classList.add("hidden");
+        document.getElementById("page-detail").classList.remove("hidden");
+        loadDetail(h.slice(7));
+      }
+      loadList();
+    })();
+  </script>
+</body>
+
+</html>
