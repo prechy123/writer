@@ -143,15 +143,31 @@ def get_story(story_id: str) -> Optional[Dict[str, Any]]:
 
 
 def list_stories(limit: int = 20, skip: int = 0) -> List[Dict[str, Any]]:
-    """List stories (most-recent first), excluding the full manuscript."""
+    """List stories (most-recent first), excluding the full manuscript.
+
+    Hidden stories (``hidden == True``) are filtered out.
+    """
     db = get_db()
     cursor = (
-        db.stories.find({}, {"final_manuscript": 0})
+        db.stories.find({"hidden": {"$ne": True}}, {"final_manuscript": 0})
         .sort("created_at", -1)
         .skip(skip)
         .limit(limit)
     )
     return list(cursor)
+
+
+def set_story_hidden(story_id: str, hidden: bool) -> Optional[Dict[str, Any]]:
+    """Toggle the ``hidden`` flag on a story. Returns the updated document."""
+    db = get_db()
+    return db.stories.find_one_and_update(
+        {"_id": story_id},
+        {"$set": {
+            "hidden": hidden,
+            "updated_at": datetime.datetime.utcnow(),
+        }},
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 # ---------------------------------------------------------------------------

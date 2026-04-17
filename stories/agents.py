@@ -222,7 +222,7 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
     Pydantic model, guaranteeing valid JSON.
     """
     llm = _get_llm(temperature=0.7)
-    structured_llm = llm.with_structured_output(StoryPlanSchema)
+    structured_llm = llm.with_structured_output(StoryPlanSchema, method="json_schema")
     system = storyteller_prompt(
         book_title=state["book_title"],
         book_description=state["book_description"],
@@ -356,7 +356,7 @@ async def reviewer_node(state: StoryState) -> Dict[str, Any]:
 
     # --- Full LLM review (only if word count passes) ---
     llm = _get_llm(temperature=0.3)
-    structured_llm = llm.with_structured_output(ReviewVerdict)
+    structured_llm = llm.with_structured_output(ReviewVerdict, method="json_schema")
     chapter_plan = state["chapters_to_write"][idx]
     system = reviewer_prompt(chapter_plan)
 
@@ -489,7 +489,7 @@ async def continuity_extractor_node(state: StoryState) -> Dict[str, Any]:
     existing_ledger = state.get("continuity_ledger") or {}
 
     llm = _get_llm(temperature=0.2)
-    structured_llm = llm.with_structured_output(ContinuityLedger)
+    structured_llm = llm.with_structured_output(ContinuityLedger, method="json_schema")
     system = continuity_extractor_prompt(
         chapter_number=last_chapter_idx + 1,
         existing_ledger=existing_ledger,

@@ -32,6 +32,7 @@ from .mongodb import (
     list_stories,
     release_continue_lock,
     save_generated_profile,
+    set_story_hidden,
     update_story_status,
 )
 from .prompts import build_bio_context
@@ -325,6 +326,36 @@ def get_story_detail(request, story_id: str):
         )
     serializer = StoryDetailSerializer(doc)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def hide_story_view(request, story_id: str):
+    """POST /api/stories/<story_id>/hide/
+
+    Soft-hides a story so it's excluded from ``GET /api/stories/``.
+    The document itself is preserved and still reachable at
+    ``GET /api/stories/<story_id>/``.
+    """
+    updated = set_story_hidden(story_id, True)
+    if updated is None:
+        return Response(
+            {"error": "Story not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    return Response({"story_id": story_id, "hidden": True})
+
+
+@api_view(["POST"])
+def unhide_story_view(request, story_id: str):
+    """POST /api/stories/<story_id>/unhide/
+
+    Restores a hidden story to the default listing.
+    """
+    updated = set_story_hidden(story_id, False)
+    if updated is None:
+        return Response(
+            {"error": "Story not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    return Response({"story_id": story_id, "hidden": False})
 
 
 @api_view(["GET"])

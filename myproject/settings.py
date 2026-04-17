@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-fallback-dev-key")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = ["writer.bdgroups.cloud"]
+ALLOWED_HOSTS = ["writer.bdgroups.cloud", "127.0.0.1"]
 
 
 # Application definition
