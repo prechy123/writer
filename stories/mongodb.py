@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, List, Optional
 
+import certifi
 from django.conf import settings
 from pymongo import MongoClient, ReturnDocument
 
@@ -15,7 +16,7 @@ def get_db():
     """Return the MongoDB database handle (lazy-initialised singleton)."""
     global _client
     if _client is None:
-        _client = MongoClient(settings.MONGODB_URI)
+        _client = MongoClient(settings.MONGODB_URI, tlsCAFile=certifi.where())
     return _client[settings.MONGODB_DB_NAME]
 
 
