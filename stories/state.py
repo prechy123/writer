@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, TypedDict
 
 
-class StoryState(TypedDict):
+class StoryState(TypedDict, total=False):
     # --- User inputs ---
     book_title: str
     book_description: str
@@ -23,13 +23,27 @@ class StoryState(TypedDict):
     retry_count: int
     running_summary: str
 
+    # --- Batch control ---
+    # Chapter loop stops when current_chapter_index >= target_chapter_index.
+    # Set at story creation (initial_chapters) and bumped by the /continue/ endpoint.
+    target_chapter_index: int
+
     # --- Chapter accumulator ---
     final_chapters: List[str]
+
+    # --- Rich continuity memory (persisted so continuation has strong anchors) ---
+    # Appended after each accepted chapter (see schemas.ChapterMetadata).
+    chapter_metadata: List[Dict[str, Any]]
+    # Living world/character/plot state, refreshed by continuity_extractor_node
+    # (see schemas.ContinuityLedger).
+    continuity_ledger: Dict[str, Any]
+    # Audit log of batches: {start_idx, end_idx, started_at, completed_at, status}.
+    batch_log: List[Dict[str, Any]]
 
     # --- Phase 6: Final output (populated by Publisher) ---
     final_manuscript: Dict[str, Any]
 
     # --- Metadata (for Django/MongoDB tracking) ---
-    status: str  # "pending" | "running" | "completed" | "failed"
+    status: str  # "pending" | "running" | "awaiting_continue" | "completed" | "failed"
     story_id: str
     error: str

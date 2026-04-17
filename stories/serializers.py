@@ -11,6 +11,20 @@ class StoryCreateSerializer(serializers.Serializer):
     book_title = serializers.CharField(max_length=300)
     book_description = serializers.CharField(max_length=5000)
     num_chapters = serializers.IntegerField(min_value=1, max_value=30)
+    initial_chapters = serializers.IntegerField(
+        required=False,
+        default=None,
+        allow_null=True,
+        min_value=1,
+        max_value=30,
+        help_text=(
+            "How many chapters to draft in this initial run. The Storyteller "
+            "always plans the full book upfront; only the Writer loop is "
+            "bounded. Defaults to settings.DEFAULT_INITIAL_CHAPTERS (3), "
+            "clamped to [1, num_chapters]. If initial_chapters >= num_chapters "
+            "the book is written in one run and the Publisher runs immediately."
+        ),
+    )
     profile_id = serializers.CharField(
         required=False,
         default=None,
@@ -20,6 +34,20 @@ class StoryCreateSerializer(serializers.Serializer):
             "and the stored author_profile / emotional_guidelines / expert_styles "
             "are injected directly. If provided but not found → 400 error. "
             "If omitted → generic Phase 1 agents run."
+        ),
+    )
+
+
+class StoryContinueSerializer(serializers.Serializer):
+    """Validates the POST body for /api/stories/<id>/continue/."""
+
+    additional_chapters = serializers.IntegerField(
+        min_value=1,
+        max_value=30,
+        help_text=(
+            "How many more chapters to draft in this batch. Must not exceed "
+            "the number of chapters still unwritten (num_chapters - "
+            "current_chapter_index); otherwise the request returns 400."
         ),
     )
 
@@ -36,7 +64,7 @@ class StoryListItemSerializer(serializers.Serializer):
 
 
 class StoryDetailSerializer(serializers.Serializer):
-    """Full representation including the manuscript."""
+    """Full representation including the manuscript and continuity context."""
 
     story_id = serializers.CharField(source="_id")
     title = serializers.CharField()
@@ -46,11 +74,39 @@ class StoryDetailSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
     chapters_completed = serializers.SerializerMethodField()
+    current_chapter_index = serializers.SerializerMethodField()
+    target_chapter_index = serializers.SerializerMethodField()
+    chapters_remaining = serializers.SerializerMethodField()
+    chapter_metadata = serializers.SerializerMethodField()
+    continuity_ledger = serializers.SerializerMethodField()
+    batch_log = serializers.ListField(required=False, default=list)
     final_manuscript = serializers.DictField(allow_null=True)
 
+    def _state(self, obj):
+        return obj.get("state") or {}
+
     def get_chapters_completed(self, obj):
-        state = obj.get("state") or {}
-        return len(state.get("final_chapters", []))
+        return len(self._state(obj).get("final_chapters", []))
+
+    def get_current_chapter_index(self, obj):
+        return int(self._state(obj).get("current_chapter_index", 0) or 0)
+
+    def get_target_chapter_index(self, obj):
+        state = self._state(obj)
+        return int(state.get("target_chapter_index") or obj.get("num_chapters", 0))
+
+    def get_chapters_remaining(self, obj):
+        state = self._state(obj)
+        total = int(obj.get("num_chapters", 0) or 0)
+        current = int(state.get("current_chapter_index", 0) or 0)
+        return max(0, total - current)
+
+    def get_chapter_metadata(self, obj):
+        """Return per-chapter metadata without the full chapter text."""
+        return self._state(obj).get("chapter_metadata", []) or []
+
+    def get_continuity_ledger(self, obj):
+        return self._state(obj).get("continuity_ledger", {}) or {}
 
 
 # ---------------------------------------------------------------------------

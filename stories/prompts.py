@@ -258,7 +258,15 @@ def writer_prompt(
     running_summary: str,
     previous_chapter_ending: str,
     min_words: int = 2000,
+    continuity_ledger: Dict[str, Any] | None = None,
+    recent_chapter_summaries: List[Dict[str, Any]] | None = None,
 ) -> str:
+    """Build the system prompt for the Writer agent.
+
+    ``continuity_ledger`` and ``recent_chapter_summaries`` are injected only
+    when available (from chapter 2 onwards).  They carry the factual ground
+    truth of the story so the Writer stays consistent across pauses/resumes.
+    """
     chapter_json = json.dumps(chapter_plan, indent=2)
     parts = [
         "You are **The Writer**. Your job is to write one chapter of a novel.\n",
@@ -284,9 +292,36 @@ def writer_prompt(
         "\n--- STORY SO FAR (running summary — do NOT repeat, only continue) ---",
         running_summary if running_summary else "(This is the first chapter.)",
     ]
+
+    if continuity_ledger:
+        ledger_json = json.dumps(continuity_ledger, indent=2)
+        parts += [
+            "\n--- CONTINUITY LEDGER (current world state — maintain this exactly) ---",
+            "Preserve every fact below. Characters must remain where this ledger "
+            "says they are, know only what the ledger says they know, and speak "
+            "of named entities exactly as written. Do not contradict open threads "
+            "or forget resolved ones.",
+            ledger_json,
+        ]
+
+    if recent_chapter_summaries:
+        summary_lines = []
+        for entry in recent_chapter_summaries:
+            ch_num = entry.get("chapter_number", "?")
+            title = entry.get("title", "")
+            summary = entry.get("summary", "")
+            label = f"Chapter {ch_num}"
+            if title:
+                label += f" — {title}"
+            summary_lines.append(f"{label}: {summary}")
+        parts += [
+            "\n--- RECENT CHAPTER SUMMARIES (immediate recency anchor) ---",
+            "\n".join(summary_lines),
+        ]
+
     if previous_chapter_ending:
         parts += [
-            "\n--- LAST 500 CHARACTERS OF PREVIOUS CHAPTER (for continuity) ---",
+            "\n--- CLOSING EXCERPT OF PREVIOUS CHAPTER (for stylistic continuity) ---",
             previous_chapter_ending,
         ]
     parts += [
@@ -295,6 +330,51 @@ def writer_prompt(
         "Do not include chapter headers like 'Chapter 1' — just the prose.",
     ]
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Post-chapter — continuity extractor
+# ---------------------------------------------------------------------------
+
+def continuity_extractor_prompt(
+    chapter_number: int,
+    existing_ledger: Dict[str, Any],
+    chapter_plan: Dict[str, Any],
+) -> str:
+    """System prompt for the continuity-extractor agent.
+
+    Takes the current ledger + the full chapter text (as the user message)
+    and returns an updated ledger via structured output.
+    """
+    ledger_json = json.dumps(existing_ledger or {}, indent=2)
+    plan_json = json.dumps(chapter_plan, indent=2)
+    return (
+        "You are **The Continuity Keeper**, a meticulous story bible maintainer.\n\n"
+        "You will receive the full text of a chapter that was just accepted, "
+        "along with the existing continuity ledger. Your job is to return a "
+        "fully updated ledger as a JSON object conforming to the required "
+        "schema.\n\n"
+        "Rules:\n"
+        f"1. Preserve everything in the existing ledger unless this chapter "
+        f"contradicts or supersedes it. Do not drop characters, threads, or "
+        f"named entities that still apply.\n"
+        f"2. Update each character's ``current_location``, ``emotional_state``, "
+        f"``knowledge``, and ``status`` to reflect where they stand at the END "
+        f"of chapter {chapter_number}.\n"
+        f"3. Set ``last_seen_chapter`` to {chapter_number} for every character "
+        f"who appeared in this chapter.\n"
+        f"4. Append any NEW named entities, items, foreshadowing hooks, or open "
+        f"threads introduced in this chapter. Prefix open/resolved threads and "
+        f"foreshadowing with ``[Ch.{chapter_number}]``.\n"
+        f"5. Move any threads that were resolved in this chapter from "
+        f"``open_threads`` to ``resolved_threads``.\n"
+        f"6. Update ``world_state`` to reflect the current time-of-day, setting, "
+        f"and timeline position at the end of the chapter.\n"
+        "7. Be concise but precise — every entry should be a short, factual "
+        "statement, not prose.\n\n"
+        f"--- CHAPTER PLAN (what was supposed to happen) ---\n{plan_json}\n\n"
+        f"--- EXISTING CONTINUITY LEDGER ---\n{ledger_json}"
+    )
 
 
 # ---------------------------------------------------------------------------

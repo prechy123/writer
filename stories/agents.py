@@ -19,6 +19,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 from .prompts import (
+    continuity_extractor_prompt,
     empath_prompt,
     masterclass_prompt,
     perfectionist_prompt,
@@ -28,7 +29,7 @@ from .prompts import (
     storyteller_prompt,
     writer_prompt,
 )
-from .schemas import ReviewVerdict, StoryPlanSchema
+from .schemas import ContinuityLedger, ReviewVerdict, StoryPlanSchema
 from .state import StoryState
 
 logger = logging.getLogger(__name__)
@@ -238,6 +239,13 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
     logger.info(
         "Storyteller complete — %d chapters planned", len(plan_dict["chapters"])
     )
+
+    # If the caller didn't specify a batch target, default to writing the
+    # whole book in one run (preserves the legacy behaviour).
+    total_chapters = len(plan_dict["chapters"])
+    existing_target = state.get("target_chapter_index") or 0
+    target = existing_target if existing_target > 0 else total_chapters
+
     return {
         "story_plan": plan_dict,
         "chapters_to_write": plan_dict["chapters"],
@@ -245,6 +253,9 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
         "current_chapter_index": 0,
         "retry_count": 0,
         "final_chapters": [],
+        "target_chapter_index": target,
+        "chapter_metadata": [],
+        "continuity_ledger": {},
     }
 
 
@@ -256,16 +267,27 @@ async def writer_node(state: StoryState) -> Dict[str, Any]:
     """Agent 5: writes one chapter.
 
     The system prompt is *dynamically constructed* by injecting outputs from
-    agents 1-3 and the running summary for context-window management.
+    agents 1-3 and the running summary for context-window management.  On
+    resume (chapter >= 2), the continuity ledger and the summaries of the
+    last two chapters are also injected so the Writer stays consistent.
     """
     llm = _get_llm(temperature=0.8)
     idx = state["current_chapter_index"]
     chapter_plan = state["chapters_to_write"][idx]
 
-    # Last 500 chars of previous chapter for stylistic continuity
+    # Closing excerpt of the previous chapter — prefer the richer 800-char
+    # excerpt stored in chapter_metadata when available; fall back to slicing
+    # the raw text for the legacy flow.
     previous_ending = ""
-    if state["final_chapters"]:
-        previous_ending = state["final_chapters"][-1][-500:]
+    chapter_metadata = state.get("chapter_metadata") or []
+    if chapter_metadata:
+        previous_ending = chapter_metadata[-1].get("closing_excerpt", "")
+    if not previous_ending and state.get("final_chapters"):
+        previous_ending = state["final_chapters"][-1][-800:]
+
+    # Continuity anchors — empty on chapter 1, populated from chapter 2 onwards.
+    continuity_ledger = state.get("continuity_ledger") or {}
+    recent_summaries = chapter_metadata[-2:] if chapter_metadata else []
 
     system = writer_prompt(
         chapter_plan=chapter_plan,
@@ -275,6 +297,8 @@ async def writer_node(state: StoryState) -> Dict[str, Any]:
         running_summary=state["running_summary"],
         previous_chapter_ending=previous_ending,
         min_words=django_settings.MIN_CHAPTER_WORDS,
+        continuity_ledger=continuity_ledger,
+        recent_chapter_summaries=recent_summaries,
     )
     response = await llm.ainvoke([
         SystemMessage(content=system),
@@ -384,8 +408,14 @@ async def perfectionist_node(state: StoryState) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 async def accept_chapter_node(state: StoryState) -> Dict[str, Any]:
-    """Append the approved draft, update the running summary, advance index."""
+    """Append the approved draft, update the running summary, advance index.
+
+    Also persists a ``ChapterMetadata`` record (title, word count, summary,
+    opening/closing excerpts) so the continuation flow has a rich recency
+    anchor without having to re-read the full previous chapter text.
+    """
     idx = state["current_chapter_index"]
+    draft = state["current_draft"]
 
     llm = _get_llm(temperature=0.3)
     summary_resp = await llm.ainvoke([
@@ -395,23 +425,96 @@ async def accept_chapter_node(state: StoryState) -> Dict[str, Any]:
             "Be concise — this will be used as context for writing "
             "subsequent chapters."
         ),
-        HumanMessage(content=state["current_draft"]),
+        HumanMessage(content=draft),
     ])
+    chapter_summary = summary_resp.content
 
     updated_summary = (
         state["running_summary"]
-        + f"\n\nChapter {idx + 1}: {summary_resp.content}"
+        + f"\n\nChapter {idx + 1}: {chapter_summary}"
     )
+
+    chapter_plan = state["chapters_to_write"][idx]
+    new_metadata_entry = {
+        "chapter_number": idx + 1,
+        "title": chapter_plan.get("title", ""),
+        "word_count": len(draft.split()),
+        "summary": chapter_summary,
+        "characters_appeared": list(chapter_plan.get("characters_involved", []) or []),
+        "key_events_delivered": list(chapter_plan.get("key_events", []) or []),
+        "opening_excerpt": draft[:300],
+        "closing_excerpt": draft[-800:] if len(draft) > 800 else draft,
+    }
+    chapter_metadata = list(state.get("chapter_metadata") or [])
+    chapter_metadata.append(new_metadata_entry)
 
     logger.info("Chapter %d accepted and summarised", idx + 1)
     return {
-        "final_chapters": state["final_chapters"] + [state["current_draft"]],
+        "final_chapters": state["final_chapters"] + [draft],
         "running_summary": updated_summary,
         "current_chapter_index": idx + 1,
         "retry_count": 0,
         "current_draft": "",
         "review_feedback": "",
+        "chapter_metadata": chapter_metadata,
     }
+
+
+# ---------------------------------------------------------------------------
+# Post-chapter — continuity extractor
+# ---------------------------------------------------------------------------
+
+async def continuity_extractor_node(state: StoryState) -> Dict[str, Any]:
+    """Refresh the ``continuity_ledger`` after a chapter is accepted.
+
+    Runs after ``accept_chapter_node``. Takes the full text of the chapter
+    just added (``final_chapters[-1]``) and the existing ledger, and
+    produces an updated ledger using structured output.  This is what makes
+    the ``/continue/`` flow safe against long pauses — the ledger is the
+    ground truth for character locations, open plot threads, named
+    entities, etc.
+    """
+    final_chapters = state.get("final_chapters") or []
+    if not final_chapters:
+        # Shouldn't happen — accept_chapter_node always runs first — but
+        # guard anyway to avoid crashing the graph.
+        logger.warning("continuity_extractor skipped — no accepted chapters yet")
+        return {}
+
+    # The chapter we just accepted is the last one in final_chapters, and
+    # current_chapter_index was already advanced past it by accept_chapter_node.
+    last_chapter_idx = state["current_chapter_index"] - 1
+    chapter_text = final_chapters[-1]
+    chapter_plan = state["chapters_to_write"][last_chapter_idx]
+    existing_ledger = state.get("continuity_ledger") or {}
+
+    llm = _get_llm(temperature=0.2)
+    structured_llm = llm.with_structured_output(ContinuityLedger)
+    system = continuity_extractor_prompt(
+        chapter_number=last_chapter_idx + 1,
+        existing_ledger=existing_ledger,
+        chapter_plan=chapter_plan,
+    )
+
+    try:
+        updated: ContinuityLedger = await structured_llm.ainvoke([
+            SystemMessage(content=system),
+            HumanMessage(content=chapter_text),
+        ])
+        logger.info(
+            "Continuity ledger refreshed after chapter %d (%d characters tracked)",
+            last_chapter_idx + 1,
+            len(updated.characters),
+        )
+        return {"continuity_ledger": updated.model_dump()}
+    except Exception:
+        # A failure to refresh the ledger must NOT abort the whole book —
+        # worst case, the next chapter falls back to the previous ledger.
+        logger.exception(
+            "continuity_extractor failed for chapter %d — keeping previous ledger",
+            last_chapter_idx + 1,
+        )
+        return {}
 
 
 # ---------------------------------------------------------------------------

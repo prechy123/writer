@@ -157,3 +157,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv(
     "GROQ_MODEL", "meta-llama/Llama-4-Scout-17B-16E-Instruct")
 MIN_CHAPTER_WORDS = int(os.getenv("MIN_CHAPTER_WORDS", "2000"))
+
+# Default size of the first chapter batch written at story creation.
+# The rest are drafted on demand via POST /api/stories/<id>/continue/.
+DEFAULT_INITIAL_CHAPTERS = int(os.getenv("DEFAULT_INITIAL_CHAPTERS", "3"))

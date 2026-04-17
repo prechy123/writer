@@ -7,6 +7,7 @@ urlpatterns = [
     path("stories/", views.list_stories_view, name="story-list"),
     path("stories/create/", views.create_story, name="story-create"),
     path("stories/<str:story_id>/", views.get_story_detail, name="story-detail"),
+    path("stories/<str:story_id>/continue/", views.continue_story_view, name="story-continue"),
     # Profiles (generate once, reuse for every story)
     path("profiles/", views.list_profiles_view, name="profile-list"),
     path("profiles/generate/", views.generate_profile_view, name="profile-generate"),

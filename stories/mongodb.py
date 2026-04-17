@@ -6,7 +6,7 @@ import datetime
 from typing import Any, Dict, List, Optional
 
 from django.conf import settings
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 
 _client: Optional[MongoClient] = None
 
@@ -28,22 +28,75 @@ def create_story_record(
     title: str,
     description: str,
     num_chapters: int,
+    *,
+    initial_chapters: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Insert an initial story document with status='pending'."""
     db = get_db()
+    now = datetime.datetime.utcnow()
+    batch_log: List[Dict[str, Any]] = []
+    if initial_chapters:
+        batch_log.append({
+            "start_idx": 0,
+            "end_idx": int(initial_chapters),
+            "started_at": now,
+            "completed_at": None,
+            "status": "running",
+        })
     doc = {
         "_id": story_id,
         "title": title,
         "description": description,
         "num_chapters": num_chapters,
+        "initial_chapters": int(initial_chapters) if initial_chapters else num_chapters,
         "status": "pending",
-        "created_at": datetime.datetime.utcnow(),
-        "updated_at": datetime.datetime.utcnow(),
+        "created_at": now,
+        "updated_at": now,
         "state": {},
         "final_manuscript": None,
+        "batch_log": batch_log,
     }
     db.stories.insert_one(doc)
     return doc
+
+
+# ---------------------------------------------------------------------------
+# Continuation — atomic CAS lock
+# ---------------------------------------------------------------------------
+
+def get_and_lock_for_continue(story_id: str) -> Optional[Dict[str, Any]]:
+    """Atomically move a story from ``awaiting_continue`` → ``running``.
+
+    Returns the locked document (post-update) on success, or ``None`` if
+    the story doesn't exist or is in the wrong status.  Using
+    ``find_one_and_update`` makes this safe against concurrent
+    ``/continue/`` requests.
+    """
+    db = get_db()
+    return db.stories.find_one_and_update(
+        {"_id": story_id, "status": "awaiting_continue"},
+        {"$set": {
+            "status": "running",
+            "updated_at": datetime.datetime.utcnow(),
+        }},
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def release_continue_lock(story_id: str, restore_status: str = "awaiting_continue") -> None:
+    """Release the CAS lock taken by ``get_and_lock_for_continue``.
+
+    Used when validation fails after the lock has been acquired (e.g.
+    the user asked for more chapters than remain).
+    """
+    db = get_db()
+    db.stories.update_one(
+        {"_id": story_id},
+        {"$set": {
+            "status": restore_status,
+            "updated_at": datetime.datetime.utcnow(),
+        }},
+    )
 
 
 def update_story_status(
@@ -52,8 +105,9 @@ def update_story_status(
     *,
     state: Optional[Dict[str, Any]] = None,
     manuscript: Optional[Dict[str, Any]] = None,
+    batch_log: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
-    """Update the status (and optionally the full state / manuscript)."""
+    """Update the status (and optionally the full state / manuscript / batch log)."""
     db = get_db()
     update: Dict[str, Any] = {
         "$set": {
@@ -65,7 +119,21 @@ def update_story_status(
         update["$set"]["state"] = state
     if manuscript is not None:
         update["$set"]["final_manuscript"] = manuscript
+    if batch_log is not None:
+        update["$set"]["batch_log"] = batch_log
     db.stories.update_one({"_id": story_id}, update)
+
+
+def append_batch_log(story_id: str, entry: Dict[str, Any]) -> None:
+    """Push a new entry onto the story's ``batch_log`` array."""
+    db = get_db()
+    db.stories.update_one(
+        {"_id": story_id},
+        {
+            "$push": {"batch_log": entry},
+            "$set": {"updated_at": datetime.datetime.utcnow()},
+        },
+    )
 
 
 def get_story(story_id: str) -> Optional[Dict[str, Any]]:
