@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -85,6 +85,11 @@ class CharacterState(BaseModel):
     """Snapshot of one character's current state in the story."""
 
     name: str
+    current_age: str = Field(
+        default="",
+        description="Character's age at the current point in the timeline. May be "
+        "a number ('32') or a range ('mid-40s'). Update if the story time-jumps.",
+    )
     current_location: str = Field(
         default="",
         description="Where this character physically is at the end of the last chapter.",
@@ -105,9 +110,117 @@ class CharacterState(BaseModel):
         default_factory=list,
         description="Defining traits or facts introduced about the character so far.",
     )
+    speech_patterns: List[str] = Field(
+        default_factory=list,
+        description="Signature proverbs, catchphrases, verbal tics, dialect markers, "
+        "or recurring figures of speech this character uses. Keep entries short "
+        "(the proverb itself or a brief rule like 'never swears').",
+    )
     last_seen_chapter: int = Field(
         default=0,
         description="Chapter number where the character last appeared.",
+    )
+
+
+class CharacterRelationship(BaseModel):
+    """The current standing between two characters — the 'Tension' variable."""
+
+    between: List[str] = Field(
+        description="The two character names this relationship is between. "
+        "Always exactly two names.",
+    )
+    tension: int = Field(
+        ge=1,
+        le=10,
+        description="Current tension level from 1 (deep trust/love) to 10 "
+        "(open hostility/war). 5 is neutral or strangers.",
+    )
+    description: str = Field(
+        description="One-sentence summary of the current dynamic and any "
+        "unspoken context (debts, secrets, recent slights).",
+    )
+    last_updated_chapter: int = Field(
+        default=0,
+        description="Chapter in which this standing last shifted.",
+    )
+
+
+class SignificantItem(BaseModel):
+    """A physical object that matters to the plot — who holds it, where it is, why it matters."""
+
+    name: str
+    description: str = Field(
+        default="",
+        description="What the object is and any physical details.",
+    )
+    current_holder: str = Field(
+        default="",
+        description="Character currently in possession, or 'none' if unowned.",
+    )
+    current_location: str = Field(
+        default="",
+        description="Where the object physically is right now.",
+    )
+    significance: str = Field(
+        default="",
+        description="Why this item matters to the plot (evidence, MacGuffin, heirloom, threat).",
+    )
+
+
+class PlotSeed(BaseModel):
+    """A planted mystery, clue, or hint and whether it has paid off yet."""
+
+    description: str = Field(
+        description="The seed itself — what was planted, in concrete terms.",
+    )
+    planted_chapter: int = Field(
+        description="Chapter where this seed was planted.",
+    )
+    payoff_chapter: Optional[int] = Field(
+        default=None,
+        description="Chapter where this seed was paid off. Null if still dangling.",
+    )
+    status: Literal["planted", "paid_off", "abandoned"] = Field(
+        default="planted",
+        description="'planted' = still open; 'paid_off' = resolved; 'abandoned' "
+        "= deliberately left unresolved. Never drop a seed — mark it abandoned instead.",
+    )
+
+
+class Subplot(BaseModel):
+    """A minor plotline running alongside the main arc."""
+
+    name: str
+    status: Literal["active", "dormant", "resolved"] = Field(
+        default="active",
+        description="'active' = advanced in recent chapters; 'dormant' = not "
+        "touched for several chapters but not resolved; 'resolved' = concluded.",
+    )
+    last_advanced_chapter: int = Field(
+        default=0,
+        description="Most recent chapter that moved this subplot forward.",
+    )
+    summary: str = Field(
+        default="",
+        description="One-sentence state of this subplot right now.",
+    )
+
+
+class WorldRule(BaseModel):
+    """A setting-specific fact, law, custom, or system the story must honour."""
+
+    scope: str = Field(
+        description="The location, region, faction, or institution this rule applies to "
+        "(e.g. 'Umuike village', 'Lagos police checkpoints', 'Enugu State judiciary'). "
+        "Use 'global' only when the rule truly applies everywhere in the story.",
+    )
+    rule: str = Field(
+        description="The rule itself — a law, custom, power dynamic, corrupt system, "
+        "geography detail, or any worldbuilding fact the writer must not contradict.",
+    )
+    introduced_in_chapter: int = Field(
+        default=0,
+        description="Chapter number where this rule was first established.",
     )
 
 
@@ -122,9 +235,41 @@ class ContinuityLedger(BaseModel):
         default="",
         description="Time-of-day, current setting, timeline position.",
     )
-    items_in_play: List[str] = Field(
+    world_rules: List[WorldRule] = Field(
         default_factory=list,
-        description="MacGuffins, letters, weapons and other objects currently in use.",
+        description="Setting-scoped worldbuilding rules (local laws, customs, corrupt "
+        "systems, geography). Keep each entry short and tag it to the scope it applies "
+        "to so rules from one location never leak into another.",
+    )
+    significant_items: List[SignificantItem] = Field(
+        default_factory=list,
+        description="Physical objects that matter to the plot — MacGuffins, letters, "
+        "weapons, heirlooms. Track each with its current holder and location.",
+    )
+    character_relationships: List[CharacterRelationship] = Field(
+        default_factory=list,
+        description="Pairwise tension/standing between major characters. Only track "
+        "relationships that actually matter to the plot — do not enumerate every "
+        "possible pair.",
+    )
+    plot_seeds: List[PlotSeed] = Field(
+        default_factory=list,
+        description="Mysteries, clues, or hints planted so far. Tracks plant/payoff "
+        "so nothing gets introduced and silently forgotten.",
+    )
+    subplots: List[Subplot] = Field(
+        default_factory=list,
+        description="Minor plotlines and their current status. Used to rotate "
+        "which subplot gets advanced in each chapter.",
+    )
+    last_chapter_intensity: int = Field(
+        default=0,
+        ge=0,
+        le=10,
+        description="Intensity of the most recent chapter on a 1-10 scale "
+        "(1 = quiet breather/dialogue-heavy, 10 = climactic/high conflict). "
+        "Used to pace the NEXT chapter — avoid two climaxes back-to-back. "
+        "0 means no chapter has been written yet.",
     )
     open_threads: List[str] = Field(
         default_factory=list,

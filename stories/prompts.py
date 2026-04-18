@@ -300,7 +300,30 @@ def writer_prompt(
             "Preserve every fact below. Characters must remain where this ledger "
             "says they are, know only what the ledger says they know, and speak "
             "of named entities exactly as written. Do not contradict open threads "
-            "or forget resolved ones.",
+            "or forget resolved ones. ``world_rules`` entries are SCOPED — only "
+            "apply a rule when the scene is in (or involves) its scope. Never let "
+            "a rule from one location bleed into another setting.",
+            "Additional behavioural rules from the ledger:",
+            "- Honour each character's ``current_age`` and ``speech_patterns`` — "
+            "if a proverb or verbal tic is listed, use it in that character's "
+            "dialogue when it fits naturally. Do not invent new catchphrases for "
+            "a character who already has established ones.",
+            "- ``character_relationships.tension`` drives how two characters "
+            "behave together: low tension = warmth/ease; high tension = clipped "
+            "dialogue, avoidance, barbed subtext. Move tension only for earned, "
+            "on-page reasons.",
+            "- ``significant_items``: an item is wherever the ledger says it is "
+            "and held by whoever the ledger says holds it. Never teleport objects.",
+            "- ``plot_seeds``: you may pay off a 'planted' seed, but NEVER "
+            "introduce a new mystery you don't intend to resolve. If you plant "
+            "something new, make it deliberate.",
+            "- ``subplots``: prefer advancing a subplot that is 'dormant' or "
+            "hasn't been touched in several chapters, rather than the one most "
+            "recently active.",
+            "- ``last_chapter_intensity``: if it was 8-10, the current chapter "
+            "should de-escalate (breather, reflection, regrouping). If it was "
+            "1-3, you have room to raise the stakes. Avoid two climaxes "
+            "back-to-back.",
             ledger_json,
         ]
 
@@ -370,7 +393,37 @@ def continuity_extractor_prompt(
         f"``open_threads`` to ``resolved_threads``.\n"
         f"6. Update ``world_state`` to reflect the current time-of-day, setting, "
         f"and timeline position at the end of the chapter.\n"
-        "7. Be concise but precise — every entry should be a short, factual "
+        f"7. Append any NEW ``world_rules`` introduced in this chapter — local "
+        f"laws, customs, power structures, corrupt systems, geography, or other "
+        f"setting-specific facts. ALWAYS fill ``scope`` with the specific place "
+        f"or institution the rule applies to (e.g. 'Umuike village', 'Lagos "
+        f"police checkpoints'); use 'global' only when truly universal. Set "
+        f"``introduced_in_chapter`` to {chapter_number}. Do not duplicate "
+        f"existing rules.\n"
+        f"8. For each character, keep ``current_age`` current (update on "
+        f"time-jumps) and append any new signature proverbs, catchphrases, or "
+        f"verbal tics to ``speech_patterns``.\n"
+        f"9. Update ``character_relationships`` — adjust ``tension`` (1=deep "
+        f"trust, 10=open hostility) whenever two characters' standing shifts, "
+        f"and set ``last_updated_chapter`` to {chapter_number}. Only track "
+        f"pairs that actually matter; do not enumerate every combination.\n"
+        f"10. Update ``significant_items`` — move a holder/location when an "
+        f"object changes hands, add new items introduced in this chapter. "
+        f"Never drop an item that is still in play.\n"
+        f"11. Update ``plot_seeds``: add any new mystery/clue planted this "
+        f"chapter (``planted_chapter`` = {chapter_number}, status='planted'); "
+        f"if this chapter paid off an earlier seed, set its ``payoff_chapter`` "
+        f"to {chapter_number} and flip status to 'paid_off'. Do not silently "
+        f"drop seeds — mark them 'abandoned' if the story is walking away.\n"
+        f"12. Update ``subplots``: if this chapter advanced a subplot, set its "
+        f"``last_advanced_chapter`` to {chapter_number} and refresh its "
+        f"``summary``. Mark dormant subplots 'dormant' and concluded ones "
+        f"'resolved'. Add any new subplot that emerged.\n"
+        f"13. Set ``last_chapter_intensity`` (1-10) based on chapter "
+        f"{chapter_number}: 1-3 = quiet breather / dialogue-heavy / "
+        f"connective tissue; 4-6 = steady rising action; 7-8 = major "
+        f"confrontation or reveal; 9-10 = climactic peak.\n"
+        "14. Be concise but precise — every entry should be a short, factual "
         "statement, not prose.\n\n"
         f"--- CHAPTER PLAN (what was supposed to happen) ---\n{plan_json}\n\n"
         f"--- EXISTING CONTINUITY LEDGER ---\n{ledger_json}"

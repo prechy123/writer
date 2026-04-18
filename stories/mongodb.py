@@ -16,7 +16,11 @@ def get_db():
     """Return the MongoDB database handle (lazy-initialised singleton)."""
     global _client
     if _client is None:
-        _client = MongoClient(settings.MONGODB_URI, tlsCAFile=certifi.where())
+        uri = settings.MONGODB_URI
+        kwargs: Dict[str, Any] = {}
+        if uri.startswith("mongodb+srv://") or "tls=true" in uri.lower():
+            kwargs["tlsCAFile"] = certifi.where()
+        _client = MongoClient(uri, **kwargs)
     return _client[settings.MONGODB_DB_NAME]
 
 

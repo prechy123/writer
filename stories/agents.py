@@ -16,7 +16,7 @@ from typing import Any, Dict
 
 from django.conf import settings as django_settings
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
+from langchain_together import ChatTogether
 
 from .prompts import (
     continuity_extractor_prompt,
@@ -39,13 +39,13 @@ logger = logging.getLogger(__name__)
 # LLM factory
 # ---------------------------------------------------------------------------
 
-def _get_llm(temperature: float = 0.7, max_retries: int = 3) -> ChatGroq:
-    return ChatGroq(
-        api_key=django_settings.GROQ_API_KEY,
-        model=django_settings.GROQ_MODEL,
+def _get_llm(temperature: float = 0.7, max_retries: int = 3) -> ChatTogether:
+    return ChatTogether(
+        api_key=django_settings.TOGETHER_API_KEY,
+        model=django_settings.TOGETHER_MODEL,
         temperature=temperature,
         max_retries=max_retries,
-        request_timeout=120,
+        timeout=120,
     )
 
 

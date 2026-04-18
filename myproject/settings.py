@@ -151,11 +151,11 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "ai_writer")
 
 # ---------------------------------------------------------------------------
-# Groq LLM
+# Together AI LLM
 # ---------------------------------------------------------------------------
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv(
-    "GROQ_MODEL", "meta-llama/Llama-4-Scout-17B-16E-Instruct")
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
+TOGETHER_MODEL = os.getenv(
+    "TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
 MIN_CHAPTER_WORDS = int(os.getenv("MIN_CHAPTER_WORDS", "2000"))
 
 # Default size of the first chapter batch written at story creation.
