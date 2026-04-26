@@ -7,6 +7,192 @@ from pydantic import BaseModel, Field
 # Storyteller (Agent 4) — structured output
 # ---------------------------------------------------------------------------
 
+class WebnovelStrategy(BaseModel):
+    """Platform-facing strategy for a Webnovel-style serial."""
+
+    platform_genre: str = Field(
+        default="",
+        description="Best-fit Webnovel genre/category for discovery.",
+    )
+    lead_type: str = Field(
+        default="",
+        description="Reader-facing lead lane, such as male lead, female lead, or ensemble.",
+    )
+    primary_tags: List[str] = Field(
+        default_factory=list,
+        description="High-signal discovery tags, e.g. SYSTEM, REVENGE, WEAKTOSTRONG.",
+    )
+    secondary_tags: List[str] = Field(
+        default_factory=list,
+        description="Supporting tags that describe tone, relationship dynamics, or tropes.",
+    )
+    content_rating: str = Field(
+        default="",
+        description="Reader suitability label such as general, teen, mature, or R18.",
+    )
+    content_warnings: List[str] = Field(
+        default_factory=list,
+        description="Concise warnings for violence, abuse, explicit content, or other triggers.",
+    )
+    target_reader: str = Field(
+        default="",
+        description="Who the serial is built for and what they already enjoy.",
+    )
+    reader_promise: str = Field(
+        default="",
+        description="The repeatable fantasy/emotional reward readers can expect every arc.",
+    )
+    protagonist_cheat: str = Field(
+        default="",
+        description="The protagonist's special advantage: system, rebirth knowledge, bloodline, status, skill, etc.",
+    )
+    self_insertion_anchor: str = Field(
+        default="",
+        description="Why readers can easily project themselves into the protagonist's position.",
+    )
+    status_ladder: List[str] = Field(
+        default_factory=list,
+        description="Visible steps by which the protagonist gains power, money, respect, safety, love, or influence.",
+    )
+    comparable_hooks: List[str] = Field(
+        default_factory=list,
+        description="Market-facing hooks comparable to common Webnovel tropes, without copying any protected work.",
+    )
+    discovery_positioning: str = Field(
+        default="",
+        description="How the title/synopsis/tags should position the book in browse and ranking contexts.",
+    )
+    short_logline: str = Field(
+        default="",
+        description="One-sentence pitch for cards, search results, or social sharing.",
+    )
+    webnovel_synopsis: str = Field(
+        default="",
+        description="A Webnovel-style synopsis with immediate conflict, trope clarity, and a strong final hook.",
+    )
+    title_variants: List[str] = Field(
+        default_factory=list,
+        description="Alternative clickable Webnovel-style titles.",
+    )
+    cover_prompt: str = Field(
+        default="",
+        description="Prompt for generating a cover image that clearly signals genre, lead, and central fantasy.",
+    )
+    update_schedule: str = Field(
+        default="",
+        description="Recommended release cadence, e.g. daily, 2 chapters/day, or weekdays.",
+    )
+    stockpile_strategy: str = Field(
+        default="",
+        description="How many chapters to prepare before launch and where to place early cliffhangers.",
+    )
+    ranking_strategy: List[str] = Field(
+        default_factory=list,
+        description="Actions that help collection, power, update, active, and comment rankings.",
+    )
+    author_note_templates: List[str] = Field(
+        default_factory=list,
+        description="Short reusable author notes for comments, library adds, and votes.",
+    )
+
+
+class LaunchChapterPlan(BaseModel):
+    """Reader-conversion plan for Chapter 1 and the first upload batch."""
+
+    conversion_goal: str = Field(
+        default="",
+        description="What Chapter 1 must make a browsing reader feel or decide before leaving.",
+    )
+    first_line_strategy: str = Field(
+        default="",
+        description="How the opening line should create instant pressure, desire, image, or question.",
+    )
+    first_200_words_hook: str = Field(
+        default="",
+        description="The exact hook Chapter 1 must establish in the first 200 words.",
+    )
+    first_scene_pressure: str = Field(
+        default="",
+        description="Immediate conflict, humiliation, danger, desire, betrayal, countdown, or social pressure in scene one.",
+    )
+    protagonist_snapshot: str = Field(
+        default="",
+        description="What readers should understand about the protagonist's wound, desire, limitation, and appeal.",
+    )
+    reader_sympathy_trigger: str = Field(
+        default="",
+        description="The moment that makes readers emotionally side with the protagonist.",
+    )
+    special_edge_tease: str = Field(
+        default="",
+        description="How Chapter 1 should hint at the protagonist's system, rebirth knowledge, rare talent, hidden status, or other edge.",
+    )
+    stakes_lock: str = Field(
+        default="",
+        description="The concrete consequence that makes the reader understand why the story must continue now.",
+    )
+    inciting_turn: str = Field(
+        default="",
+        description="The turn that shifts Chapter 1 from setup into an unavoidable serial engine.",
+    )
+    chapter_one_progression_reward: str = Field(
+        default="",
+        description="The visible win, reveal, clue, status shift, or leverage Chapter 1 must deliver.",
+    )
+    chapter_one_cliffhanger: str = Field(
+        default="",
+        description="The Chapter 1 ending beat that should push readers into Chapter 2.",
+    )
+    first_five_chapter_promises: List[str] = Field(
+        default_factory=list,
+        description="Reader-facing promises the first five chapters should make and begin satisfying.",
+    )
+    tag_delivery_moments: List[str] = Field(
+        default_factory=list,
+        description="Concrete early scenes that prove the chosen Webnovel tags are real.",
+    )
+    comment_magnet_question: str = Field(
+        default="",
+        description="A genuine post-chapter question likely to invite reader comments without begging.",
+    )
+    early_dropoff_risks: List[str] = Field(
+        default_factory=list,
+        description="Specific launch weaknesses to avoid: slow setup, unclear cheat, passive lead, genre mismatch, etc.",
+    )
+    revision_checklist: List[str] = Field(
+        default_factory=list,
+        description="Chapter-1 review checklist used by Writer, Reviewer, and Perfectionist.",
+    )
+
+
+class SerialArc(BaseModel):
+    """Long-form arc roadmap for a serial that may run beyond the first batch."""
+
+    arc_number: int
+    title: str
+    chapter_range: str = Field(
+        description="Human-readable chapter range, e.g. '1-25'.",
+    )
+    external_goal: str = Field(
+        description="Concrete goal the protagonist is chasing in this arc.",
+    )
+    central_conflict: str = Field(
+        description="Main opposition, dilemma, or relationship pressure of the arc.",
+    )
+    progression_rewards: List[str] = Field(
+        default_factory=list,
+        description="Power-ups, reveals, status gains, relationship shifts, or wins promised in the arc.",
+    )
+    major_reversals: List[str] = Field(
+        default_factory=list,
+        description="Setbacks or twists that prevent the arc from becoming linear.",
+    )
+    cliffhanger_bridge: str = Field(
+        default="",
+        description="How this arc pulls the reader into the next arc.",
+    )
+
+
 class ChapterPlan(BaseModel):
     """Schema for a single chapter inside the story plan."""
 
@@ -20,6 +206,42 @@ class ChapterPlan(BaseModel):
         description="The emotional trajectory of this chapter "
         "(e.g. 'hopeful → tense → bittersweet')"
     )
+    opening_hook: str = Field(
+        default="",
+        description="The first-scene hook or immediate question that should grab readers.",
+    )
+    progression_reward: str = Field(
+        default="",
+        description="Concrete reward delivered in this chapter: new power, clue, win, status, intimacy, or leverage.",
+    )
+    new_question_raised: str = Field(
+        default="",
+        description="Fresh mystery, danger, desire, or uncertainty created before the chapter ends.",
+    )
+    cliffhanger: str = Field(
+        default="",
+        description="The final beat that should make readers open the next chapter.",
+    )
+    reader_emotion_target: str = Field(
+        default="",
+        description="Dominant reader feeling to create: outrage, triumph, dread, yearning, curiosity, etc.",
+    )
+    tags_served: List[str] = Field(
+        default_factory=list,
+        description="Which Webnovel discovery tags/tropes this chapter actively satisfies.",
+    )
+    comment_prompt: str = Field(
+        default="",
+        description="Short optional author-note prompt to invite comments after this chapter.",
+    )
+    power_stone_pitch: str = Field(
+        default="",
+        description="Short optional author-note prompt to invite votes/support after this chapter.",
+    )
+    filler_risk: str = Field(
+        default="",
+        description="Specific thing this chapter must avoid so it does not feel like filler.",
+    )
 
 
 class CharacterProfile(BaseModel):
@@ -30,6 +252,36 @@ class CharacterProfile(BaseModel):
     description: str
     motivations: List[str]
     arc: str = Field(description="How this character changes across the story")
+    webnovel_role_hook: str = Field(
+        default="",
+        description="Reader-facing trope/function this character serves: rival, hidden master, jealous sibling, cold CEO, etc.",
+    )
+    progression_function: str = Field(
+        default="",
+        description="How this character creates wins, setbacks, training, status shifts, romance tension, or reveals.",
+    )
+    speech_style: str = Field(
+        default="",
+        description="How this character sounds in dialogue: diction, rhythm, "
+        "formality, slang, restraint, favourite rhetorical habits, and what "
+        "they would never say.",
+    )
+    education_access: str = Field(
+        default="",
+        description="What education or informal learning this character has "
+        "realistically accessed, including gaps or limits.",
+    )
+    resources_or_limitations: str = Field(
+        default="",
+        description="Money, technology, family support, social access, mobility, "
+        "or other constraints that should shape what this character can plausibly do.",
+    )
+    knowledge_sources: List[str] = Field(
+        default_factory=list,
+        description="Concrete sources for what this character knows: school, "
+        "libraries, borrowed books, radio, TV viewing centers, mentors, work, "
+        "internet cafes, phones, apprenticeships, or similar.",
+    )
 
 
 class StoryPlanSchema(BaseModel):
@@ -40,6 +292,14 @@ class StoryPlanSchema(BaseModel):
 
     title: str
     genre: str
+    webnovel_strategy: WebnovelStrategy = Field(
+        default_factory=WebnovelStrategy,
+        description="Discovery, retention, and publishing strategy for Webnovel.",
+    )
+    launch_chapter_plan: LaunchChapterPlan = Field(
+        default_factory=LaunchChapterPlan,
+        description="Dedicated conversion plan for Chapter 1 and the first upload batch.",
+    )
     setting: str
     themes: List[str]
     characters: List[CharacterProfile]
@@ -47,6 +307,33 @@ class StoryPlanSchema(BaseModel):
         description="High-level 1-paragraph summary of the entire story"
     )
     chapters: List[ChapterPlan]
+    serial_arcs: List[SerialArc] = Field(
+        default_factory=list,
+        description="Arc roadmap. First arc should align with the detailed chapter list; later arcs may be broader.",
+    )
+    release_plan: List[str] = Field(
+        default_factory=list,
+        description="Launch and update plan: stockpile, daily cadence, early hook milestones, batch strategy.",
+    )
+    retention_strategy: List[str] = Field(
+        default_factory=list,
+        description="Rules for keeping readers through comments, cliffhangers, progression, and emotional payoffs.",
+    )
+    long_form_roadmap: str = Field(
+        default="",
+        description="How this premise can expand beyond the requested chapters without losing focus.",
+    )
+    opening_strategy_notes: List[str] = Field(
+        default_factory=list,
+        description="Book-level guidance for varying chapter openings. Avoid "
+        "reusing the same first-image, sentence rhythm, punch line, or emotional beat.",
+    )
+    background_constraints: List[str] = Field(
+        default_factory=list,
+        description="Continuity constraints from the user's background and the "
+        "story premise, especially socioeconomic access, education, technology, "
+        "travel, housing, and media exposure limits.",
+    )
     initial_summary: str = Field(
         description="A brief synopsis to initialise the running summary "
         "used by the Writer for context management"
@@ -101,6 +388,17 @@ class CharacterState(BaseModel):
     knowledge: List[str] = Field(
         default_factory=list,
         description="Plot-relevant facts this character now knows.",
+    )
+    knowledge_sources: List[str] = Field(
+        default_factory=list,
+        description="Concrete sources that explain how this character learned "
+        "important facts or gained access to books, media, technology, mentors, "
+        "schooling, work experience, or specialist information.",
+    )
+    resource_constraints: List[str] = Field(
+        default_factory=list,
+        description="Current money, technology, mobility, family, class, housing, "
+        "or social-access limits the story must not contradict.",
     )
     status: str = Field(
         default="alive",
@@ -283,6 +581,18 @@ class ContinuityLedger(BaseModel):
         default_factory=list,
         description="Foreshadowing hooks planted so far, with the chapter they appeared in.",
     )
+    reader_open_loops: List[str] = Field(
+        default_factory=list,
+        description="Current reader-facing questions, cliffhangers, threats, promises, or desires pulling readers forward.",
+    )
+    progression_milestones: List[str] = Field(
+        default_factory=list,
+        description="Visible wins and growth steps already delivered: power, status, money, romance, skill, clue, territory, safety.",
+    )
+    unresolved_cliffhangers: List[str] = Field(
+        default_factory=list,
+        description="Specific cliffhangers introduced at chapter endings that still need payoff.",
+    )
     named_entities: List[str] = Field(
         default_factory=list,
         description="Proper nouns (people, places, factions, objects) with short definitions, for voice and spelling consistency.",
@@ -303,6 +613,18 @@ class ChapterMetadata(BaseModel):
         default_factory=list,
         description="Events actually delivered in the prose (may differ from the plan).",
     )
+    launch_plan_applied: bool = Field(
+        default=False,
+        description="True when the dedicated Chapter 1 launch plan was active for this chapter.",
+    )
+    first_200_word_goal: str = Field(
+        default="",
+        description="Launch-plan target for the first 200 words, when applicable.",
+    )
+    comment_magnet_question: str = Field(
+        default="",
+        description="Launch-plan comment prompt associated with this chapter, when applicable.",
+    )
     opening_excerpt: str = Field(
         default="",
         description="First ~300 chars of the chapter (for tone spot-checks).",
@@ -310,4 +632,11 @@ class ChapterMetadata(BaseModel):
     closing_excerpt: str = Field(
         default="",
         description="Last ~800 chars of the chapter (used for stylistic continuity).",
+    )
+    summary_embedding: List[float] = Field(
+        default_factory=list,
+        description="Vector embedding of ``summary``. Populated by accept_chapter_node "
+        "and used by stories/retrieval.py to pick the most relevant earlier "
+        "chapters for the upcoming Writer prompt. Empty when embedding is "
+        "unavailable; the retrieval layer treats that as 'skip this entry'.",
     )

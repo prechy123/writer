@@ -11,6 +11,62 @@ class StoryCreateSerializer(serializers.Serializer):
     book_title = serializers.CharField(max_length=300)
     book_description = serializers.CharField(max_length=5000)
     num_chapters = serializers.IntegerField(min_value=1, max_value=30)
+    platform_genre = serializers.CharField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=120,
+        help_text=(
+            "Optional Webnovel genre/category preference, e.g. Fantasy, Urban, "
+            "Games, Eastern, Teen, LGBT+, or Romance-adjacent fantasy."
+        ),
+    )
+    lead_type = serializers.CharField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=80,
+        help_text="Optional discovery lane: male lead, female lead, ensemble, etc.",
+    )
+    target_reader = serializers.CharField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=500,
+        help_text="Optional audience note describing who should enjoy this serial.",
+    )
+    content_rating = serializers.CharField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=80,
+        help_text="Optional rating target such as general, teen, mature, or R18.",
+    )
+    tags = serializers.ListField(
+        child=serializers.CharField(max_length=60),
+        required=False,
+        default=list,
+        help_text="Optional Webnovel-style tags to serve honestly in the story.",
+    )
+    must_include_tropes = serializers.ListField(
+        child=serializers.CharField(max_length=120),
+        required=False,
+        default=list,
+        help_text="Optional tropes the planner should include on-page.",
+    )
+    must_avoid_tropes = serializers.ListField(
+        child=serializers.CharField(max_length=120),
+        required=False,
+        default=list,
+        help_text="Optional tropes, content, or patterns the planner should avoid.",
+    )
+    release_goal = serializers.CharField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=500,
+        help_text="Optional launch/update goal, e.g. daily updates, first 10 chapters stockpiled.",
+    )
     initial_chapters = serializers.IntegerField(
         required=False,
         default=None,
@@ -77,6 +133,8 @@ class StoryDetailSerializer(serializers.Serializer):
     current_chapter_index = serializers.SerializerMethodField()
     target_chapter_index = serializers.SerializerMethodField()
     chapters_remaining = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
+    progress_log = serializers.SerializerMethodField()
     chapter_metadata = serializers.SerializerMethodField()
     continuity_ledger = serializers.SerializerMethodField()
     batch_log = serializers.ListField(required=False, default=list)
@@ -84,6 +142,18 @@ class StoryDetailSerializer(serializers.Serializer):
 
     def _state(self, obj):
         return obj.get("state") or {}
+
+    def _serialize_datetimes(self, value):
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {
+                key: self._serialize_datetimes(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._serialize_datetimes(item) for item in value]
+        return value
 
     def get_chapters_completed(self, obj):
         return len(self._state(obj).get("final_chapters", []))
@@ -100,6 +170,14 @@ class StoryDetailSerializer(serializers.Serializer):
         total = int(obj.get("num_chapters", 0) or 0)
         current = int(state.get("current_chapter_index", 0) or 0)
         return max(0, total - current)
+
+    def get_progress(self, obj):
+        progress = obj.get("progress") or self._state(obj).get("progress") or {}
+        return self._serialize_datetimes(progress)
+
+    def get_progress_log(self, obj):
+        progress_log = obj.get("progress_log") or []
+        return self._serialize_datetimes(progress_log[-20:])
 
     def get_chapter_metadata(self, obj):
         """Return per-chapter metadata without the full chapter text."""

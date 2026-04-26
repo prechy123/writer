@@ -39,6 +39,15 @@ def create_story_record(
     """Insert an initial story document with status='pending'."""
     db = get_db()
     now = datetime.datetime.utcnow()
+    progress = {
+        "stage": "queued",
+        "message": "Story generation queued.",
+        "completed_chapters": 0,
+        "total_chapters": int(num_chapters),
+        "target_chapter_index": int(initial_chapters) if initial_chapters else int(num_chapters),
+        "percent": 0,
+        "updated_at": now,
+    }
     batch_log: List[Dict[str, Any]] = []
     if initial_chapters:
         batch_log.append({
@@ -57,9 +66,11 @@ def create_story_record(
         "status": "pending",
         "created_at": now,
         "updated_at": now,
-        "state": {},
+        "state": {"progress": progress},
         "final_manuscript": None,
         "batch_log": batch_log,
+        "progress": progress,
+        "progress_log": [progress],
     }
     db.stories.insert_one(doc)
     return doc
@@ -111,9 +122,14 @@ def update_story_status(
     state: Optional[Dict[str, Any]] = None,
     manuscript: Optional[Dict[str, Any]] = None,
     batch_log: Optional[List[Dict[str, Any]]] = None,
+    progress: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Update the status (and optionally the full state / manuscript / batch log)."""
     db = get_db()
+    if progress is not None:
+        progress = {**progress, "updated_at": datetime.datetime.utcnow()}
+        if state is not None:
+            state = {**state, "progress": progress}
     update: Dict[str, Any] = {
         "$set": {
             "status": status,
@@ -126,7 +142,40 @@ def update_story_status(
         update["$set"]["final_manuscript"] = manuscript
     if batch_log is not None:
         update["$set"]["batch_log"] = batch_log
+    if progress is not None:
+        update["$set"]["progress"] = progress
+        if state is None:
+            update["$set"]["state.progress"] = progress
+        update["$push"] = {
+            "progress_log": {
+                "$each": [progress],
+                "$slice": -100,
+            }
+        }
     db.stories.update_one({"_id": story_id}, update)
+
+
+def update_story_progress(story_id: str, progress: Dict[str, Any]) -> None:
+    """Persist a live progress event for polling UIs and server-side audit logs."""
+    db = get_db()
+    now = datetime.datetime.utcnow()
+    event = {**progress, "updated_at": now}
+    db.stories.update_one(
+        {"_id": story_id},
+        {
+            "$set": {
+                "progress": event,
+                "state.progress": event,
+                "updated_at": now,
+            },
+            "$push": {
+                "progress_log": {
+                    "$each": [event],
+                    "$slice": -100,
+                }
+            },
+        },
+    )
 
 
 def append_batch_log(story_id: str, entry: Dict[str, Any]) -> None:

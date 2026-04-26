@@ -12,7 +12,7 @@ fast-path when a stored profile is used.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from django.conf import settings as django_settings
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -21,6 +21,7 @@ from langchain_together import ChatTogether
 from .prompts import (
     continuity_extractor_prompt,
     empath_prompt,
+    launch_chapter_planner_prompt,
     masterclass_prompt,
     perfectionist_prompt,
     profiler_prompt,
@@ -29,7 +30,18 @@ from .prompts import (
     storyteller_prompt,
     writer_prompt,
 )
-from .schemas import ContinuityLedger, ReviewVerdict, StoryPlanSchema
+from .schemas import (
+    ContinuityLedger,
+    LaunchChapterPlan,
+    ReviewVerdict,
+    StoryPlanSchema,
+)
+from .mongodb import update_story_progress
+from .retrieval import (
+    build_retrieval_query,
+    embed_text,
+    select_relevant_summaries,
+)
 from .state import StoryState
 
 logger = logging.getLogger(__name__)
@@ -39,14 +51,128 @@ logger = logging.getLogger(__name__)
 # LLM factory
 # ---------------------------------------------------------------------------
 
-def _get_llm(temperature: float = 0.7, max_retries: int = 3) -> ChatTogether:
+def _model_for_role(role: str = "default") -> str:
+    """Resolve the Together serverless model for a pipeline role."""
+    model_map = getattr(django_settings, "TOGETHER_MODELS", {}) or {}
+    default_model = (
+        model_map.get("default")
+        or getattr(django_settings, "TOGETHER_DEFAULT_MODEL", "")
+        or getattr(django_settings, "TOGETHER_MODEL", "")
+    )
+    return model_map.get(role) or default_model
+
+
+def _max_tokens_for_role(role: str = "default") -> int | None:
+    """Resolve the Together output token budget for a pipeline role."""
+    token_map = getattr(django_settings, "TOGETHER_MAX_TOKENS", {}) or {}
+    if role in token_map:
+        configured = token_map[role]
+    elif "default" in token_map:
+        configured = token_map["default"]
+    else:
+        configured = getattr(django_settings, "TOGETHER_DEFAULT_MAX_TOKENS", None)
+    if configured is None:
+        return None
+    try:
+        value = int(configured)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid Together max token value for role '%s': %r",
+            role,
+            configured,
+        )
+        return None
+    return value if value > 0 else None
+
+
+def _get_llm(
+    temperature: float = 0.7,
+    max_retries: int = 3,
+    role: str = "default",
+) -> ChatTogether:
+    model = _model_for_role(role)
+    max_tokens = _max_tokens_for_role(role)
+    logger.debug(
+        "Together model selected for role '%s': %s (max_tokens=%s)",
+        role,
+        model,
+        max_tokens,
+    )
     return ChatTogether(
         api_key=django_settings.TOGETHER_API_KEY,
-        model=django_settings.TOGETHER_MODEL,
+        model=model,
         temperature=temperature,
+        max_tokens=max_tokens,
         max_retries=max_retries,
         timeout=120,
     )
+
+
+def _chapter_percent(
+    completed_chapters: int,
+    total_chapters: int,
+    phase_fraction: float = 0.0,
+) -> int:
+    """Map chapter work onto a simple 20-95% progress range."""
+    if total_chapters <= 0:
+        return 0
+    chapter_span = 75 / total_chapters
+    percent = 20 + (completed_chapters * chapter_span) + (phase_fraction * chapter_span)
+    return max(0, min(99, int(percent)))
+
+
+def _mark_progress(
+    state: StoryState,
+    stage: str,
+    message: str,
+    *,
+    chapter_number: int | None = None,
+    percent: int | None = None,
+    phase_fraction: float = 0.0,
+    extra: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Log and persist the current graph step without interrupting generation."""
+    total = len(state.get("chapters_to_write") or []) or int(state.get("num_chapters", 0) or 0)
+    current_idx = int(state.get("current_chapter_index", 0) or 0)
+    completed = len(state.get("final_chapters") or []) or current_idx
+    target = int(state.get("target_chapter_index") or total or 0)
+    if chapter_number is None and total and current_idx < total:
+        chapter_number = current_idx + 1
+    if percent is None:
+        percent = _chapter_percent(completed, total, phase_fraction)
+
+    progress = {
+        "stage": stage,
+        "message": message,
+        "current_chapter": chapter_number,
+        "current_chapter_index": current_idx,
+        "completed_chapters": completed,
+        "target_chapter_index": target,
+        "total_chapters": total,
+        "percent": percent,
+    }
+    if extra:
+        progress.update(extra)
+
+    story_id = state.get("story_id")
+    if story_id:
+        logger.info(
+            "Story %s — progress [%s] %s (chapter=%s completed=%d/%d percent=%s)",
+            story_id,
+            stage,
+            message,
+            chapter_number or "-",
+            completed,
+            total,
+            percent,
+        )
+        try:
+            update_story_progress(story_id, progress)
+        except Exception:
+            logger.exception("Story %s — failed to persist progress update", story_id)
+    else:
+        logger.info("Progress [%s] %s", stage, message)
+    return progress
 
 
 # ---------------------------------------------------------------------------
@@ -61,9 +187,21 @@ async def profiler_node(state: StoryState) -> Dict[str, Any]:
     """
     if state.get("author_profile"):
         logger.info("Profiler skipped — using stored profile")
+        _mark_progress(
+            state,
+            "profile",
+            "Author voice profile already available.",
+            percent=5,
+        )
         return {}
 
-    llm = _get_llm(temperature=0.7)
+    _mark_progress(
+        state,
+        "profile",
+        "Building author voice profile.",
+        percent=5,
+    )
+    llm = _get_llm(temperature=0.7, role="profile")
     system = profiler_prompt(state["book_title"], state["book_description"])
     response = await llm.ainvoke([
         SystemMessage(content=system),
@@ -82,9 +220,21 @@ async def empath_node(state: StoryState) -> Dict[str, Any]:
     """
     if state.get("emotional_guidelines"):
         logger.info("Empath skipped — using stored profile")
+        _mark_progress(
+            state,
+            "empath",
+            "Emotional guidelines already available.",
+            percent=8,
+        )
         return {}
 
-    llm = _get_llm(temperature=0.7)
+    _mark_progress(
+        state,
+        "empath",
+        "Building emotional guidelines.",
+        percent=8,
+    )
+    llm = _get_llm(temperature=0.7, role="profile")
     system = empath_prompt(state["book_title"], state["book_description"])
     response = await llm.ainvoke([
         SystemMessage(content=system),
@@ -103,9 +253,21 @@ async def masterclass_node(state: StoryState) -> Dict[str, Any]:
     """
     if state.get("expert_styles"):
         logger.info("Masterclass skipped — using stored profile")
+        _mark_progress(
+            state,
+            "masterclass",
+            "Expert style guide already available.",
+            percent=10,
+        )
         return {}
 
-    llm = _get_llm(temperature=0.7)
+    _mark_progress(
+        state,
+        "masterclass",
+        "Building expert style guide.",
+        percent=10,
+    )
+    llm = _get_llm(temperature=0.7, role="profile")
     system = masterclass_prompt(state["book_title"], state["book_description"])
     response = await llm.ainvoke([
         SystemMessage(content=system),
@@ -135,7 +297,7 @@ async def run_profiling(
     This is called by the ``generate_profile`` view, NOT by the graph.
     It accepts the rich biographical context that the graph nodes don't need.
     """
-    llm = _get_llm(temperature=0.7)
+    llm = _get_llm(temperature=0.7, role="profile")
 
     samples = writing_samples if writing_samples else None
 
@@ -221,7 +383,13 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
     Uses ``with_structured_output`` to enforce the ``StoryPlanSchema``
     Pydantic model, guaranteeing valid JSON.
     """
-    llm = _get_llm(temperature=0.7)
+    _mark_progress(
+        state,
+        "storyteller",
+        "Planning the full story architecture.",
+        percent=14,
+    )
+    llm = _get_llm(temperature=0.7, role="storyteller")
     structured_llm = llm.with_structured_output(StoryPlanSchema, method="json_schema")
     system = storyteller_prompt(
         book_title=state["book_title"],
@@ -230,6 +398,7 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
         author_profile=state["author_profile"],
         emotional_guidelines=state["emotional_guidelines"],
         expert_styles=state["expert_styles"],
+        webnovel_preferences=state.get("webnovel_preferences") or {},
     )
     plan: StoryPlanSchema = await structured_llm.ainvoke([
         SystemMessage(content=system),
@@ -238,6 +407,12 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
     plan_dict = plan.model_dump()
     logger.info(
         "Storyteller complete — %d chapters planned", len(plan_dict["chapters"])
+    )
+    _mark_progress(
+        state,
+        "storyteller",
+        f"Story plan ready with {len(plan_dict['chapters'])} chapters.",
+        percent=20,
     )
 
     # If the caller didn't specify a batch target, default to writing the
@@ -260,6 +435,82 @@ async def storyteller_node(state: StoryState) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2b — launch chapter planner
+# ---------------------------------------------------------------------------
+
+async def launch_chapter_planner_node(state: StoryState) -> Dict[str, Any]:
+    """Dedicated Webnovel launch planner for Chapter 1.
+
+    The Storyteller creates the whole serial architecture; this node narrows
+    that plan into a conversion-focused brief for the first chapter and launch
+    batch. It keeps the main plan intact and stores the launch plan in both
+    ``story_plan`` and top-level state for easy prompt injection.
+    """
+    story_plan = dict(state.get("story_plan") or {})
+    if not story_plan:
+        logger.warning("LaunchChapterPlanner skipped — no story_plan available")
+        return {}
+
+    _mark_progress(
+        state,
+        "launch_planner",
+        "Building Chapter 1 launch plan.",
+        percent=22,
+    )
+    llm = _get_llm(temperature=0.45, role="launch_planner")
+    structured_llm = llm.with_structured_output(
+        LaunchChapterPlan,
+        method="json_schema",
+    )
+    system = launch_chapter_planner_prompt(
+        book_title=state["book_title"],
+        book_description=state["book_description"],
+        story_plan=story_plan,
+        webnovel_preferences=state.get("webnovel_preferences") or {},
+    )
+    launch_plan: LaunchChapterPlan = await structured_llm.ainvoke([
+        SystemMessage(content=system),
+        HumanMessage(
+            content="Build the Chapter 1 launch-conversion plan now."
+        ),
+    ])
+    launch_plan_dict = launch_plan.model_dump()
+
+    story_plan["launch_chapter_plan"] = launch_plan_dict
+
+    # Keep chapter 1's plan aligned with the dedicated launch brief without
+    # overwriting the rest of the chapter architecture.
+    chapters_to_write = [
+        dict(chapter) for chapter in (state.get("chapters_to_write") or [])
+    ]
+    if chapters_to_write:
+        first = dict(chapters_to_write[0])
+        if launch_plan_dict.get("first_200_words_hook"):
+            first["opening_hook"] = launch_plan_dict["first_200_words_hook"]
+        if launch_plan_dict.get("chapter_one_progression_reward"):
+            first["progression_reward"] = launch_plan_dict[
+                "chapter_one_progression_reward"
+            ]
+        if launch_plan_dict.get("chapter_one_cliffhanger"):
+            first["cliffhanger"] = launch_plan_dict["chapter_one_cliffhanger"]
+        chapters_to_write[0] = first
+        story_plan["chapters"] = chapters_to_write
+
+    logger.info("LaunchChapterPlanner complete for story %s", state.get("story_id"))
+    _mark_progress(
+        state,
+        "launch_planner",
+        "Chapter 1 launch plan ready.",
+        percent=25,
+    )
+    return {
+        "story_plan": story_plan,
+        "chapters_to_write": chapters_to_write,
+        "launch_chapter_plan": launch_plan_dict,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Phase 3 — chapter writer (dynamic prompt injection)
 # ---------------------------------------------------------------------------
 
@@ -271,9 +522,16 @@ async def writer_node(state: StoryState) -> Dict[str, Any]:
     resume (chapter >= 2), the continuity ledger and the summaries of the
     last two chapters are also injected so the Writer stays consistent.
     """
-    llm = _get_llm(temperature=0.8)
+    llm = _get_llm(temperature=0.8, role="writer")
     idx = state["current_chapter_index"]
     chapter_plan = state["chapters_to_write"][idx]
+    _mark_progress(
+        state,
+        "writer",
+        f"Writing Chapter {idx + 1}: {chapter_plan.get('title', '')}",
+        chapter_number=idx + 1,
+        phase_fraction=0.15,
+    )
 
     # Closing excerpt of the previous chapter — prefer the richer 800-char
     # excerpt stored in chapter_metadata when available; fall back to slicing
@@ -287,7 +545,37 @@ async def writer_node(state: StoryState) -> Dict[str, Any]:
 
     # Continuity anchors — empty on chapter 1, populated from chapter 2 onwards.
     continuity_ledger = state.get("continuity_ledger") or {}
-    recent_summaries = chapter_metadata[-2:] if chapter_metadata else []
+    recent_window = int(getattr(django_settings, "RAG_RECENT_WINDOW", 2) or 0)
+    recent_summaries = (
+        chapter_metadata[-recent_window:] if recent_window and chapter_metadata else []
+    )
+
+    # RAG: retrieve the K most semantically-relevant earlier chapters for
+    # the upcoming chapter. The recency window above is excluded so the
+    # writer doesn't see those chapters twice. Fails soft to [].
+    rag_top_k = int(getattr(django_settings, "RAG_TOP_K", 0) or 0)
+    relevant_past_summaries: list[Dict[str, Any]] = []
+    if rag_top_k > 0 and chapter_metadata:
+        try:
+            relevant_past_summaries = await select_relevant_summaries(
+                build_retrieval_query(chapter_plan),
+                chapter_metadata,
+                k=rag_top_k,
+                exclude_recent=recent_window,
+            )
+        except Exception:
+            logger.exception(
+                "RAG retrieval failed for chapter %d — falling back to recency only",
+                idx + 1,
+            )
+
+    launch_plan = {}
+    if idx == 0:
+        launch_plan = (
+            state.get("launch_chapter_plan")
+            or (state.get("story_plan") or {}).get("launch_chapter_plan")
+            or {}
+        )
 
     system = writer_prompt(
         chapter_plan=chapter_plan,
@@ -299,17 +587,46 @@ async def writer_node(state: StoryState) -> Dict[str, Any]:
         min_words=django_settings.MIN_CHAPTER_WORDS,
         continuity_ledger=continuity_ledger,
         recent_chapter_summaries=recent_summaries,
+        relevant_past_summaries=relevant_past_summaries,
+        launch_chapter_plan=launch_plan,
     )
-    response = await llm.ainvoke([
-        SystemMessage(content=system),
-        HumanMessage(
-            content=f"Write Chapter {idx + 1}: {chapter_plan.get('title', '')}"
-        ),
-    ])
+    user_message = HumanMessage(
+        content=f"Write Chapter {idx + 1}: {chapter_plan.get('title', '')}"
+    )
+    response = await llm.ainvoke([SystemMessage(content=system), user_message])
+
+    # Reasoning-capable Together models can burn the entire max_tokens budget
+    # on hidden reasoning and return content="" with finish_reason="length".
+    # Retry once with a smaller token budget (more room for visible output)
+    # before handing the empty draft to the reviewer.
+    if not (response.content or "").strip():
+        logger.warning(
+            "Writer returned empty content for chapter %d — metadata=%s. Retrying once.",
+            idx + 1,
+            getattr(response, "response_metadata", {}),
+        )
+        retry_max_tokens = _max_tokens_for_role("writer")
+        retry_max_tokens = int(retry_max_tokens * 0.7) if retry_max_tokens else None
+        retry_llm = ChatTogether(
+            api_key=django_settings.TOGETHER_API_KEY,
+            model=_model_for_role("writer"),
+            temperature=0.9,
+            max_tokens=retry_max_tokens,
+            max_retries=3,
+            timeout=120,
+        )
+        response = await retry_llm.ainvoke([SystemMessage(content=system), user_message])
+        if not (response.content or "").strip():
+            logger.warning(
+                "Writer retry also empty for chapter %d — metadata=%s",
+                idx + 1,
+                getattr(response, "response_metadata", {}),
+            )
+
     logger.info(
-        "Writer complete — chapter %d (%d chars)", idx + 1, len(response.content)
+        "Writer complete — chapter %d (%d chars)", idx + 1, len(response.content or "")
     )
-    return {"current_draft": response.content}
+    return {"current_draft": response.content or ""}
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +646,14 @@ async def reviewer_node(state: StoryState) -> Dict[str, Any]:
     idx = state["current_chapter_index"]
     new_retry = state["retry_count"] + 1
     min_words = django_settings.MIN_CHAPTER_WORDS
+    _mark_progress(
+        state,
+        "reviewer",
+        f"Reviewing Chapter {idx + 1}.",
+        chapter_number=idx + 1,
+        phase_fraction=0.45,
+        extra={"retry_count": new_retry},
+    )
 
     # --- Programmatic word-count gate (saves an LLM call) ---
     word_count = len(state["current_draft"].split())
@@ -355,10 +680,22 @@ async def reviewer_node(state: StoryState) -> Dict[str, Any]:
         }
 
     # --- Full LLM review (only if word count passes) ---
-    llm = _get_llm(temperature=0.3)
+    llm = _get_llm(temperature=0.3, role="reviewer")
     structured_llm = llm.with_structured_output(ReviewVerdict, method="json_schema")
     chapter_plan = state["chapters_to_write"][idx]
-    system = reviewer_prompt(chapter_plan)
+    recent_metadata = (state.get("chapter_metadata") or [])[-3:]
+    launch_plan = {}
+    if idx == 0:
+        launch_plan = (
+            state.get("launch_chapter_plan")
+            or (state.get("story_plan") or {}).get("launch_chapter_plan")
+            or {}
+        )
+    system = reviewer_prompt(
+        chapter_plan,
+        recent_chapter_metadata=recent_metadata,
+        launch_chapter_plan=launch_plan,
+    )
 
     verdict: ReviewVerdict = await structured_llm.ainvoke([
         SystemMessage(content=system),
@@ -383,13 +720,29 @@ async def reviewer_node(state: StoryState) -> Dict[str, Any]:
 
 async def perfectionist_node(state: StoryState) -> Dict[str, Any]:
     """Agent 6: rewrites the chapter based on reviewer feedback."""
-    llm = _get_llm(temperature=0.6)
+    llm = _get_llm(temperature=0.6, role="perfectionist")
     idx = state["current_chapter_index"]
     chapter_plan = state["chapters_to_write"][idx]
+    _mark_progress(
+        state,
+        "perfectionist",
+        f"Revising Chapter {idx + 1} after review.",
+        chapter_number=idx + 1,
+        phase_fraction=0.65,
+        extra={"retry_count": state.get("retry_count", 0)},
+    )
+    launch_plan = {}
+    if idx == 0:
+        launch_plan = (
+            state.get("launch_chapter_plan")
+            or (state.get("story_plan") or {}).get("launch_chapter_plan")
+            or {}
+        )
     system = perfectionist_prompt(
         current_draft=state["current_draft"],
         review_feedback=state["review_feedback"],
         chapter_plan=chapter_plan,
+        launch_chapter_plan=launch_plan,
     )
     response = await llm.ainvoke([
         SystemMessage(content=system),
@@ -415,26 +768,90 @@ async def accept_chapter_node(state: StoryState) -> Dict[str, Any]:
     anchor without having to re-read the full previous chapter text.
     """
     idx = state["current_chapter_index"]
-    draft = state["current_draft"]
+    draft = state["current_draft"] or ""
+    retry_count = state.get("retry_count", 0)
+    chapter_plan = state["chapters_to_write"][idx]
 
-    llm = _get_llm(temperature=0.3)
-    summary_resp = await llm.ainvoke([
-        SystemMessage(
-            content="Summarise the following chapter in 2-3 sentences.  "
-            "Focus on plot progression and character development.  "
-            "Be concise — this will be used as context for writing "
-            "subsequent chapters."
-        ),
-        HumanMessage(content=draft),
-    ])
-    chapter_summary = summary_resp.content
+    # An empty draft is never accepted on its own merit. If we still have
+    # retries left, bounce it back through the perfectionist. If retries are
+    # exhausted, fail the run with a clear error rather than writing a
+    # zero-word chapter into the manuscript.
+    if not draft.strip():
+        if retry_count < 3:
+            logger.warning(
+                "Chapter %d draft is empty — sending back through perfectionist (retry %d/3)",
+                idx + 1,
+                retry_count + 1,
+            )
+            return {
+                "_review_status": "revise",
+                "review_feedback": (
+                    "Writer produced an empty chapter. Rewrite the chapter from scratch "
+                    "using the chapter plan, continuity ledger, and previous chapter "
+                    "summaries as context. Aim for the full minimum word count."
+                ),
+                "retry_count": retry_count + 1,
+            }
+        error_msg = (
+            f"Chapter {idx + 1} could not be drafted after {retry_count} retries — "
+            "writer kept returning empty content."
+        )
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
 
-    updated_summary = (
-        state["running_summary"]
-        + f"\n\nChapter {idx + 1}: {chapter_summary}"
+    _mark_progress(
+        state,
+        "accept_chapter",
+        f"Accepting and summarising Chapter {idx + 1}.",
+        chapter_number=idx + 1,
+        phase_fraction=0.82,
     )
 
-    chapter_plan = state["chapters_to_write"][idx]
+    # Deterministic fallback summary built from the chapter plan — used when
+    # the summary LLM call fails. Reuses fields already required below for
+    # chapter_metadata, so no new prompt engineering is needed.
+    fallback_summary = (
+        f"Chapter {idx + 1}: {chapter_plan.get('title', '') or 'Untitled'}. "
+        f"Key events: "
+        f"{', '.join(chapter_plan.get('key_events', []) or []) or 'see chapter plan'}."
+    )
+
+    try:
+        llm = _get_llm(temperature=0.3, role="summary")
+        summary_resp = await llm.ainvoke([
+            SystemMessage(
+                content="Summarise the following chapter in 2-3 sentences.  "
+                "Focus on plot progression and character development.  "
+                "Be concise — this will be used as context for writing "
+                "subsequent chapters."
+            ),
+            HumanMessage(content=draft),
+        ])
+        chapter_summary = (summary_resp.content or "").strip() or fallback_summary
+    except Exception:
+        logger.exception(
+            "Summary LLM failed for chapter %d — using deterministic fallback",
+            idx + 1,
+        )
+        chapter_summary = fallback_summary
+
+    # Embed the summary so the next Writer call can retrieve it via RAG.
+    # Failure is non-fatal — the chapter still gets accepted, just without
+    # a vector. select_relevant_summaries skips entries that lack one.
+    summary_embedding = await embed_text(chapter_summary) or []
+
+    # `running_summary` is no longer extended chapter-by-chapter (that string
+    # used to grow linearly and would blow the Writer prompt past ~30
+    # chapters). It now stays as the immutable book synopsis set by the
+    # Storyteller, and per-chapter context comes from RAG + the recency
+    # window in writer_node.
+    updated_summary = state["running_summary"]
+
+    launch_plan = (
+        state.get("launch_chapter_plan")
+        or (state.get("story_plan") or {}).get("launch_chapter_plan")
+        or {}
+    )
     new_metadata_entry = {
         "chapter_number": idx + 1,
         "title": chapter_plan.get("title", ""),
@@ -442,15 +859,45 @@ async def accept_chapter_node(state: StoryState) -> Dict[str, Any]:
         "summary": chapter_summary,
         "characters_appeared": list(chapter_plan.get("characters_involved", []) or []),
         "key_events_delivered": list(chapter_plan.get("key_events", []) or []),
+        "launch_plan_applied": idx == 0 and bool(launch_plan),
+        "first_200_word_goal": launch_plan.get("first_200_words_hook", "")
+        if idx == 0
+        else "",
+        "comment_magnet_question": launch_plan.get("comment_magnet_question", "")
+        if idx == 0
+        else "",
+        "opening_hook": chapter_plan.get("opening_hook", ""),
+        "progression_reward": chapter_plan.get("progression_reward", ""),
+        "new_question_raised": chapter_plan.get("new_question_raised", ""),
+        "cliffhanger": chapter_plan.get("cliffhanger", ""),
+        "reader_emotion_target": chapter_plan.get("reader_emotion_target", ""),
+        "tags_served": list(chapter_plan.get("tags_served", []) or []),
+        "comment_prompt": chapter_plan.get("comment_prompt", ""),
+        "power_stone_pitch": chapter_plan.get("power_stone_pitch", ""),
+        "filler_risk": chapter_plan.get("filler_risk", ""),
         "opening_excerpt": draft[:300],
         "closing_excerpt": draft[-800:] if len(draft) > 800 else draft,
+        "summary_embedding": summary_embedding,
     }
     chapter_metadata = list(state.get("chapter_metadata") or [])
     chapter_metadata.append(new_metadata_entry)
 
     logger.info("Chapter %d accepted and summarised", idx + 1)
+    final_chapters = state["final_chapters"] + [draft]
+    progress_state = {
+        **state,
+        "final_chapters": final_chapters,
+        "current_chapter_index": idx + 1,
+    }
+    _mark_progress(
+        progress_state,
+        "chapter_complete",
+        f"Chapter {idx + 1} accepted.",
+        chapter_number=idx + 1,
+        phase_fraction=0.0,
+    )
     return {
-        "final_chapters": state["final_chapters"] + [draft],
+        "final_chapters": final_chapters,
         "running_summary": updated_summary,
         "current_chapter_index": idx + 1,
         "retry_count": 0,
@@ -487,8 +934,15 @@ async def continuity_extractor_node(state: StoryState) -> Dict[str, Any]:
     chapter_text = final_chapters[-1]
     chapter_plan = state["chapters_to_write"][last_chapter_idx]
     existing_ledger = state.get("continuity_ledger") or {}
+    _mark_progress(
+        state,
+        "continuity",
+        f"Refreshing continuity after Chapter {last_chapter_idx + 1}.",
+        chapter_number=last_chapter_idx + 1,
+        phase_fraction=0.95,
+    )
 
-    llm = _get_llm(temperature=0.2)
+    llm = _get_llm(temperature=0.2, role="continuity")
     structured_llm = llm.with_structured_output(ContinuityLedger, method="json_schema")
     system = continuity_extractor_prompt(
         chapter_number=last_chapter_idx + 1,
@@ -521,19 +975,102 @@ async def continuity_extractor_node(state: StoryState) -> Dict[str, Any]:
 # Phase 6 — publisher / compiler
 # ---------------------------------------------------------------------------
 
+def _format_chapter_digest_entry(meta: Dict[str, Any]) -> str:
+    """Render one chapter_metadata record into a compact, audit-ready block.
+
+    Uses the planned hook/cliffhanger fields plus short opening/closing
+    excerpts so the Publisher can audit serial retention without seeing the
+    full chapter text. Excerpts are clipped to keep the digest bounded as
+    the book grows past ~30 chapters.
+    """
+    excerpt_cap = 200
+    opening = (meta.get("opening_excerpt") or "")[:excerpt_cap]
+    closing_full = meta.get("closing_excerpt") or ""
+    closing = closing_full[-excerpt_cap:] if len(closing_full) > excerpt_cap else closing_full
+    key_events = meta.get("key_events_delivered") or []
+    lines = [
+        f"[Ch.{meta.get('chapter_number', '?')}] {meta.get('title', '')} "
+        f"({meta.get('word_count', 0)} words)",
+        f"Summary: {meta.get('summary', '')}",
+    ]
+    if meta.get("opening_hook"):
+        lines.append(f"Planned opening hook: {meta['opening_hook']}")
+    if meta.get("cliffhanger"):
+        lines.append(f"Planned cliffhanger: {meta['cliffhanger']}")
+    if meta.get("progression_reward"):
+        lines.append(f"Progression reward: {meta['progression_reward']}")
+    if key_events:
+        lines.append(f"Key events: {'; '.join(key_events)}")
+    if opening:
+        lines.append(f"Opening excerpt: {opening}")
+    if closing:
+        lines.append(f"Closing excerpt: {closing}")
+    return "\n".join(lines)
+
+
+def _build_publisher_payload(
+    final_chapters: List[str],
+    chapter_metadata: List[Dict[str, Any]],
+) -> str:
+    """Assemble the Publisher's input: Ch.1 in full + per-chapter digest.
+
+    Falls back to opening/closing excerpts of each chapter when metadata is
+    missing (shouldn't happen in normal flow, but keeps the publisher safe
+    against partial state from older runs).
+    """
+    parts: List[str] = []
+    if final_chapters:
+        parts.append("=== CHAPTER 1 (FULL TEXT) ===\n" + final_chapters[0])
+
+    if chapter_metadata:
+        digest = "\n\n".join(
+            _format_chapter_digest_entry(m) for m in chapter_metadata
+        )
+        parts.append("=== CHAPTER DIGEST ===\n" + digest)
+    elif len(final_chapters) > 1:
+        fallback_blocks = []
+        for i, ch in enumerate(final_chapters[1:], start=2):
+            opening = ch[:300]
+            closing = ch[-500:] if len(ch) > 500 else ch
+            fallback_blocks.append(
+                f"[Ch.{i}] (no metadata)\n"
+                f"Opening: {opening}\n"
+                f"Closing: {closing}"
+            )
+        parts.append("=== CHAPTER DIGEST (fallback) ===\n" + "\n\n".join(fallback_blocks))
+
+    return "\n\n".join(parts)
+
+
 async def publisher_node(state: StoryState) -> Dict[str, Any]:
-    """Agent 8: compiles the final manuscript and generates sequel hooks."""
-    llm = _get_llm(temperature=0.7)
+    """Agent 8: compiles the final manuscript and generates sequel hooks.
+
+    Sends a bounded digest (Ch.1 full + per-chapter metadata) to the LLM
+    instead of joining every chapter's text — that join scales linearly with
+    chapter count and blows past the model context window past ~30 chapters.
+    """
+    _mark_progress(
+        state,
+        "publisher",
+        "Compiling final manuscript and publishing notes.",
+        percent=96,
+    )
+    llm = _get_llm(temperature=0.7, role="publisher")
     system = publisher_prompt(state["book_title"], state["story_plan"])
 
-    all_chapters = "\n\n--- CHAPTER BREAK ---\n\n".join(state["final_chapters"])
+    payload = _build_publisher_payload(
+        state["final_chapters"],
+        state.get("chapter_metadata") or [],
+    )
     response = await llm.ainvoke([
         SystemMessage(content=system),
         HumanMessage(
             content=(
-                "Here are all the completed chapters.  "
-                "Produce the blurb, sequel hooks and editorial notes.\n\n"
-                + all_chapters
+                "Below is Chapter 1 in full plus a structured digest of every "
+                "chapter. Produce the blurb, publishing package, launch assets, "
+                "Chapter 1 audit, retention audit, sequel hooks, and editorial "
+                "notes per your instructions.\n\n"
+                + payload
             )
         ),
     ])
@@ -541,6 +1078,11 @@ async def publisher_node(state: StoryState) -> Dict[str, Any]:
     manuscript = {
         "title": state["book_title"],
         "story_plan": state["story_plan"],
+        "webnovel_strategy": state["story_plan"].get("webnovel_strategy", {}),
+        "launch_chapter_plan": state["story_plan"].get("launch_chapter_plan", {}),
+        "serial_arcs": state["story_plan"].get("serial_arcs", []),
+        "release_plan": state["story_plan"].get("release_plan", []),
+        "retention_strategy": state["story_plan"].get("retention_strategy", []),
         "chapters": [
             {"chapter_number": i + 1, "text": ch}
             for i, ch in enumerate(state["final_chapters"])

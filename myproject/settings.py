@@ -154,10 +154,128 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "ai_writer")
 # Together AI LLM
 # ---------------------------------------------------------------------------
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
-TOGETHER_MODEL = os.getenv(
-    "TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
+
+# Serverless model routing. TOGETHER_MODEL remains a legacy/default fallback:
+# if an existing deployment already sets TOGETHER_MODEL, all unconfigured
+# roles still inherit it.
+TOGETHER_DEFAULT_MODEL = os.getenv(
+    "TOGETHER_DEFAULT_MODEL",
+    os.getenv("TOGETHER_MODEL", "MiniMaxAI/MiniMax-M2.7"),
+)
+TOGETHER_MODEL = os.getenv("TOGETHER_MODEL", TOGETHER_DEFAULT_MODEL)
+
+TOGETHER_PROFILE_MODEL = os.getenv(
+    "TOGETHER_PROFILE_MODEL", TOGETHER_DEFAULT_MODEL)
+TOGETHER_PLANNER_MODEL = os.getenv(
+    "TOGETHER_PLANNER_MODEL", "moonshotai/Kimi-K2.5")
+TOGETHER_WRITER_MODEL = os.getenv(
+    "TOGETHER_WRITER_MODEL", "moonshotai/Kimi-K2.5")
+TOGETHER_REVIEWER_MODEL = os.getenv(
+    "TOGETHER_REVIEWER_MODEL", "openai/gpt-oss-120b")
+TOGETHER_CONTINUITY_MODEL = os.getenv(
+    "TOGETHER_CONTINUITY_MODEL", "openai/gpt-oss-120b")
+TOGETHER_SUMMARY_MODEL = os.getenv(
+    "TOGETHER_SUMMARY_MODEL", "openai/gpt-oss-120b")
+TOGETHER_PUBLISHER_MODEL = os.getenv(
+    "TOGETHER_PUBLISHER_MODEL", TOGETHER_CONTINUITY_MODEL)
+TOGETHER_PERFECTIONIST_MODEL = os.getenv(
+    "TOGETHER_PERFECTIONIST_MODEL", TOGETHER_WRITER_MODEL)
+
+TOGETHER_MODELS = {
+    "default": TOGETHER_DEFAULT_MODEL,
+    "profile": TOGETHER_PROFILE_MODEL,
+    "storyteller": TOGETHER_PLANNER_MODEL,
+    "launch_planner": TOGETHER_PLANNER_MODEL,
+    "writer": TOGETHER_WRITER_MODEL,
+    "reviewer": TOGETHER_REVIEWER_MODEL,
+    "perfectionist": TOGETHER_PERFECTIONIST_MODEL,
+    "summary": TOGETHER_SUMMARY_MODEL,
+    "continuity": TOGETHER_CONTINUITY_MODEL,
+    "publisher": TOGETHER_PUBLISHER_MODEL,
+}
+
+
+def _int_env(name: str, default: int) -> int:
+    return int(os.getenv(name, str(default)))
+
+
+# Explicit output budgets keep long structured JSON and chapter drafts from
+# inheriting provider defaults that are often too small for this pipeline.
+TOGETHER_DEFAULT_MAX_TOKENS = _int_env("TOGETHER_DEFAULT_MAX_TOKENS", 4096)
+TOGETHER_PROFILE_MAX_TOKENS = _int_env("TOGETHER_PROFILE_MAX_TOKENS", 4096)
+TOGETHER_PLANNER_MAX_TOKENS = _int_env("TOGETHER_PLANNER_MAX_TOKENS", 12000)
+TOGETHER_LAUNCH_PLANNER_MAX_TOKENS = _int_env(
+    "TOGETHER_LAUNCH_PLANNER_MAX_TOKENS", 6000
+)
+TOGETHER_WRITER_MAX_TOKENS = _int_env("TOGETHER_WRITER_MAX_TOKENS", 7000)
+TOGETHER_REVIEWER_MAX_TOKENS = _int_env("TOGETHER_REVIEWER_MAX_TOKENS", 4096)
+TOGETHER_CONTINUITY_MAX_TOKENS = _int_env("TOGETHER_CONTINUITY_MAX_TOKENS", 12000)
+TOGETHER_SUMMARY_MAX_TOKENS = _int_env("TOGETHER_SUMMARY_MAX_TOKENS", 1024)
+TOGETHER_PUBLISHER_MAX_TOKENS = _int_env("TOGETHER_PUBLISHER_MAX_TOKENS", 4096)
+TOGETHER_PERFECTIONIST_MAX_TOKENS = _int_env(
+    "TOGETHER_PERFECTIONIST_MAX_TOKENS", TOGETHER_WRITER_MAX_TOKENS
+)
+
+TOGETHER_MAX_TOKENS = {
+    "default": TOGETHER_DEFAULT_MAX_TOKENS,
+    "profile": TOGETHER_PROFILE_MAX_TOKENS,
+    "storyteller": TOGETHER_PLANNER_MAX_TOKENS,
+    "launch_planner": TOGETHER_LAUNCH_PLANNER_MAX_TOKENS,
+    "writer": TOGETHER_WRITER_MAX_TOKENS,
+    "reviewer": TOGETHER_REVIEWER_MAX_TOKENS,
+    "perfectionist": TOGETHER_PERFECTIONIST_MAX_TOKENS,
+    "summary": TOGETHER_SUMMARY_MAX_TOKENS,
+    "continuity": TOGETHER_CONTINUITY_MAX_TOKENS,
+    "publisher": TOGETHER_PUBLISHER_MAX_TOKENS,
+}
+
+# ---------------------------------------------------------------------------
+# Retrieval (RAG over per-chapter summaries) — see stories/retrieval.py
+# ---------------------------------------------------------------------------
+TOGETHER_EMBEDDING_MODEL = os.getenv(
+    "TOGETHER_EMBEDDING_MODEL", "intfloat/multilingual-e5-large-instruct"
+)
+# Top-K chapters to retrieve per Writer call. The last RAG_RECENT_WINDOW
+# chapters are always included by recency, so they're excluded from RAG to
+# avoid duplication.
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
+RAG_RECENT_WINDOW = int(os.getenv("RAG_RECENT_WINDOW", "2"))
+
 MIN_CHAPTER_WORDS = int(os.getenv("MIN_CHAPTER_WORDS", "2000"))
 
 # Default size of the first chapter batch written at story creation.
 # The rest are drafted on demand via POST /api/stories/<id>/continue/.
 DEFAULT_INITIAL_CHAPTERS = int(os.getenv("DEFAULT_INITIAL_CHAPTERS", "3"))
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "stories": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "myproject": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}

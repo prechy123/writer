@@ -6,6 +6,7 @@ class StoryState(TypedDict, total=False):
     book_title: str
     book_description: str
     num_chapters: int
+    webnovel_preferences: Dict[str, Any]
 
     # --- Phase 1: Context (populated by Profiler, Empath, Masterclass) ---
     author_profile: str
@@ -15,6 +16,7 @@ class StoryState(TypedDict, total=False):
     # --- Phase 2: Story Architecture (populated by Storyteller) ---
     story_plan: Dict[str, Any]
     chapters_to_write: List[Dict]
+    launch_chapter_plan: Dict[str, Any]
 
     # --- Phase 3-5: Drafting & Review loop ---
     current_chapter_index: int
@@ -22,11 +24,15 @@ class StoryState(TypedDict, total=False):
     review_feedback: str
     retry_count: int
     running_summary: str
+    # Transient verdict from reviewer_node, read by graph._review_router.
+    # Declared explicitly so LangGraph's channel system propagates it.
+    _review_status: str
 
     # --- Batch control ---
     # Chapter loop stops when current_chapter_index >= target_chapter_index.
     # Set at story creation (initial_chapters) and bumped by the /continue/ endpoint.
     target_chapter_index: int
+    progress: Dict[str, Any]
 
     # --- Chapter accumulator ---
     final_chapters: List[str]

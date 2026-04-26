@@ -9,7 +9,7 @@ Two compiled graphs are exposed:
 Graph flow (full pipeline)::
 
     START ─┬─> profiler    ─┐
-           ├─> empath      ─┼─> storyteller ─> writer ─> reviewer
+           ├─> empath      ─┼─> storyteller ─> launch_planner ─> writer ─> reviewer
            └─> masterclass ─┘                    ^           │
                                                  │     ┌─────┴─────┐
                                                  │  approve/      revise &
@@ -38,6 +38,7 @@ from .agents import (
     accept_chapter_node,
     continuity_extractor_node,
     empath_node,
+    launch_chapter_planner_node,
     masterclass_node,
     perfectionist_node,
     profiler_node,
@@ -60,10 +61,20 @@ def _review_router(state: StoryState) -> str:
 
     - ``approve`` OR ``retry_count >= 3`` → accept the chapter.
     - ``revise`` AND ``retry_count < 3``  → send to the Perfectionist.
+
+    Default is "revise" — a missing status should err on the side of
+    rewriting rather than silently accepting whatever's in current_draft.
     """
-    status = state.get("_review_status", "approve")
-    if status == "approve" or state["retry_count"] >= 3:
-        if state["retry_count"] >= 3 and status != "approve":
+    status = state.get("_review_status", "revise")
+    retry_count = state.get("retry_count", 0)
+    logger.info(
+        "review_router: status=%s retry=%d chapter=%d",
+        status,
+        retry_count,
+        state["current_chapter_index"] + 1,
+    )
+    if status == "approve" or retry_count >= 3:
+        if retry_count >= 3 and status != "approve":
             logger.warning(
                 "Max retries reached for chapter %d — accepting as-is",
                 state["current_chapter_index"] + 1,
@@ -148,6 +159,7 @@ def build_full_graph() -> StateGraph:
     graph.add_node("empath", empath_node)
     graph.add_node("masterclass", masterclass_node)
     graph.add_node("storyteller", storyteller_node)
+    graph.add_node("launch_planner", launch_chapter_planner_node)
 
     # --- Phase 1: parallel fan-out from START ---
     graph.add_edge(START, "profiler")
@@ -159,8 +171,9 @@ def build_full_graph() -> StateGraph:
     graph.add_edge("empath", "storyteller")
     graph.add_edge("masterclass", "storyteller")
 
-    # --- Phase 2 → Phase 3: storyteller → writer ---
-    graph.add_edge("storyteller", "writer")
+    # --- Phase 2 → Phase 2b → Phase 3: storyteller → launch planner → writer ---
+    graph.add_edge("storyteller", "launch_planner")
+    graph.add_edge("launch_planner", "writer")
 
     _add_chapter_loop_edges(graph)
 

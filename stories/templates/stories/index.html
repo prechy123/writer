@@ -196,6 +196,57 @@
       margin-right: 18px;
     }
 
+    .progress-panel {
+      background: #faf8f5;
+      border: 1px solid #e8e3dc;
+      border-radius: 4px;
+      padding: 14px 16px;
+      margin: 18px 0 8px;
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    .progress-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      color: #333;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .progress-message {
+      color: #666;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-top: 4px;
+    }
+
+    .progress-track {
+      height: 6px;
+      background: #eee7df;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #8a6f55;
+      transition: width .3s ease;
+    }
+
+    .progress-log {
+      margin-top: 10px;
+      color: #777;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .progress-log div {
+      margin-top: 3px;
+    }
+
     /* ── Manuscript sections ────────────────────────────────────────── */
     .section {
       margin-bottom: 32px;
@@ -274,6 +325,35 @@
       color: #5a5149;
       padding: 3px 10px;
       border-radius: 10px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px 18px;
+      margin-top: 8px;
+    }
+
+    .meta-item {
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #555;
+    }
+
+    .meta-item strong {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #999;
+      margin-bottom: 2px;
+    }
+
+    .note-body {
+      white-space: pre-wrap;
+      line-height: 1.75;
+      font-size: 14px;
     }
 
     .character-card {
@@ -364,6 +444,7 @@
 
   <script>
     const API = "/api";
+    let detailPollTimer = null;
 
     /* ── Helpers ─────────────────────────────────────────────────── */
     function badge(status) {
@@ -389,14 +470,84 @@
         });
     }
 
+    function hasAny(obj) {
+      if (!obj) return false;
+      return Object.values(obj).some(v => Array.isArray(v) ? v.length : Boolean(v));
+    }
+
+    function tags(items) {
+      const clean = (items || []).filter(Boolean);
+      if (!clean.length) return "";
+      return `<ul class="tag-list" style="margin-top:8px">
+        ${clean.map(t => `<li class="tag">${esc(t)}</li>`).join("")}
+      </ul>`;
+    }
+
+    function bullets(items) {
+      const clean = (items || []).filter(Boolean);
+      if (!clean.length) return "";
+      return `<ul style="padding-left:20px">${clean.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`;
+    }
+
+    function clearDetailPoll() {
+      if (detailPollTimer) {
+        clearTimeout(detailPollTimer);
+        detailPollTimer = null;
+      }
+    }
+
+    function shouldPoll(status) {
+      return status === "pending" || status === "running";
+    }
+
+    function scheduleDetailPoll(storyId, status) {
+      clearDetailPoll();
+      if (!shouldPoll(status)) return;
+      detailPollTimer = setTimeout(() => {
+        loadDetail(storyId, { silent: true });
+      }, 5000);
+    }
+
+    function renderProgress(s) {
+      const progress = s.progress || {};
+      if (!hasAny(progress) && !shouldPoll(s.status)) return "";
+
+      const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+      const completed = progress.completed_chapters ?? s.chapters_completed ?? 0;
+      const total = progress.total_chapters || s.num_chapters || 0;
+      const stage = progress.stage ? progress.stage.replace(/_/g, " ") : s.status;
+      const message = progress.message || (
+        shouldPoll(s.status) ? "Story generation is running." : "No live progress available."
+      );
+      const updated = progress.updated_at ? `Updated ${fmtDate(progress.updated_at)}` : "";
+      const recent = (s.progress_log || []).slice(-4).reverse();
+
+      return `<div class="progress-panel">
+        <div class="progress-title">
+          <span>${esc(stage)}</span>
+          <span>${completed}/${total} chapters</span>
+        </div>
+        <div class="progress-message">${esc(message)}</div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${percent}%"></div>
+        </div>
+        <div class="progress-log">
+          ${updated ? `<div>${esc(updated)}</div>` : ""}
+          ${recent.map(item => `<div>${esc(item.message || item.stage || "")}</div>`).join("")}
+        </div>
+      </div>`;
+    }
+
     /* ── Navigation ─────────────────────────────────────────────── */
     function showList() {
+      clearDetailPoll();
       document.getElementById("page-list").classList.remove("hidden");
       document.getElementById("page-detail").classList.add("hidden");
       history.pushState(null, "", "#");
     }
 
     function showDetail(storyId) {
+      clearDetailPoll();
       document.getElementById("page-list").classList.add("hidden");
       document.getElementById("page-detail").classList.remove("hidden");
       history.pushState(null, "", "#story=" + storyId);
@@ -438,6 +589,9 @@
               &middot; Created ${fmtDate(s.created_at)}
               &middot; Updated ${fmtDate(s.updated_at)}
             </div>
+            ${s.progress && s.progress.message && shouldPoll(s.status) ? `
+              <div class="story-meta">${esc(s.progress.message)}</div>
+            ` : ""}
           </li>
         `).join("");
         $list.classList.remove("hidden");
@@ -449,14 +603,16 @@
     }
 
     /* ── Load story detail ──────────────────────────────────────── */
-    async function loadDetail(storyId) {
+    async function loadDetail(storyId, options = {}) {
       const $loading = document.getElementById("detail-loading");
       const $error = document.getElementById("detail-error");
       const $content = document.getElementById("detail-content");
 
-      $loading.classList.remove("hidden");
+      if (!options.silent) {
+        $loading.classList.remove("hidden");
+        $content.classList.add("hidden");
+      }
       $error.classList.add("hidden");
-      $content.classList.add("hidden");
 
       try {
         const res = await fetch(API + "/stories/" + storyId + "/");
@@ -478,6 +634,8 @@
             <span>Created ${fmtDate(s.created_at)}</span>
           </div>
         </div>`;
+
+        html += renderProgress(s);
 
         const ms = s.final_manuscript;
 
@@ -504,6 +662,114 @@
             html += `</div>`;
           }
 
+          /* ── Webnovel strategy ───────────────────────────── */
+          const strategy = plan.webnovel_strategy || {};
+          if (hasAny(strategy)) {
+            html += `<div class="section">
+              <div class="section-label">Webnovel Strategy</div>`;
+
+            if (strategy.short_logline) {
+              html += `<p><strong>Logline:</strong> ${esc(strategy.short_logline)}</p>`;
+            }
+            if (strategy.webnovel_synopsis) {
+              html += `<p style="margin-top:8px"><strong>Synopsis:</strong> ${esc(strategy.webnovel_synopsis)}</p>`;
+            }
+            if (strategy.reader_promise) {
+              html += `<p style="margin-top:8px"><strong>Reader Promise:</strong> ${esc(strategy.reader_promise)}</p>`;
+            }
+
+            const primaryTags = strategy.primary_tags || [];
+            const secondaryTags = strategy.secondary_tags || [];
+            if (primaryTags.length || secondaryTags.length) {
+              html += tags([...primaryTags, ...secondaryTags]);
+            }
+
+            html += `<div class="meta-grid">`;
+            [
+              ["Platform Genre", strategy.platform_genre],
+              ["Lead Type", strategy.lead_type],
+              ["Target Reader", strategy.target_reader],
+              ["Content Rating", strategy.content_rating],
+              ["Protagonist Edge", strategy.protagonist_cheat],
+              ["Self-Insertion", strategy.self_insertion_anchor],
+              ["Update Schedule", strategy.update_schedule],
+              ["Stockpile", strategy.stockpile_strategy]
+            ].forEach(([label, value]) => {
+              if (value) {
+                html += `<div class="meta-item"><strong>${esc(label)}</strong>${esc(value)}</div>`;
+              }
+            });
+            html += `</div>`;
+
+            if (strategy.status_ladder && strategy.status_ladder.length) {
+              html += `<div style="margin-top:12px"><strong>Status Ladder</strong>${bullets(strategy.status_ladder)}</div>`;
+            }
+            if (strategy.comparable_hooks && strategy.comparable_hooks.length) {
+              html += `<div style="margin-top:12px"><strong>Comparable Hooks</strong>${bullets(strategy.comparable_hooks)}</div>`;
+            }
+            if (strategy.ranking_strategy && strategy.ranking_strategy.length) {
+              html += `<div style="margin-top:12px"><strong>Ranking Strategy</strong>${bullets(strategy.ranking_strategy)}</div>`;
+            }
+            if (strategy.author_note_templates && strategy.author_note_templates.length) {
+              html += `<div style="margin-top:12px"><strong>Author Note Templates</strong>${bullets(strategy.author_note_templates)}</div>`;
+            }
+            if (strategy.title_variants && strategy.title_variants.length) {
+              html += `<div style="margin-top:12px"><strong>Title Variants</strong>${tags(strategy.title_variants)}</div>`;
+            }
+            if (strategy.cover_prompt) {
+              html += `<p style="margin-top:12px"><strong>Cover Prompt:</strong> ${esc(strategy.cover_prompt)}</p>`;
+            }
+            html += `</div>`;
+          }
+
+          /* ── Launch chapter plan ─────────────────────────── */
+          const planLaunch = plan.launch_chapter_plan || {};
+          const launchPlan = hasAny(planLaunch) ? planLaunch : (ms.launch_chapter_plan || {});
+          if (hasAny(launchPlan)) {
+            html += `<div class="section">
+              <div class="section-label">Launch Chapter Plan</div>`;
+
+            if (launchPlan.conversion_goal) {
+              html += `<p><strong>Conversion Goal:</strong> ${esc(launchPlan.conversion_goal)}</p>`;
+            }
+            if (launchPlan.first_200_words_hook) {
+              html += `<p style="margin-top:8px"><strong>First 200 Words:</strong> ${esc(launchPlan.first_200_words_hook)}</p>`;
+            }
+
+            html += `<div class="meta-grid">`;
+            [
+              ["First Line", launchPlan.first_line_strategy],
+              ["Scene Pressure", launchPlan.first_scene_pressure],
+              ["Protagonist Snapshot", launchPlan.protagonist_snapshot],
+              ["Sympathy Trigger", launchPlan.reader_sympathy_trigger],
+              ["Special Edge Tease", launchPlan.special_edge_tease],
+              ["Stakes Lock", launchPlan.stakes_lock],
+              ["Inciting Turn", launchPlan.inciting_turn],
+              ["Chapter 1 Reward", launchPlan.chapter_one_progression_reward],
+              ["Chapter 1 Cliffhanger", launchPlan.chapter_one_cliffhanger],
+              ["Comment Magnet", launchPlan.comment_magnet_question]
+            ].forEach(([label, value]) => {
+              if (value) {
+                html += `<div class="meta-item"><strong>${esc(label)}</strong>${esc(value)}</div>`;
+              }
+            });
+            html += `</div>`;
+
+            if (launchPlan.first_five_chapter_promises && launchPlan.first_five_chapter_promises.length) {
+              html += `<div style="margin-top:12px"><strong>First Five Chapter Promises</strong>${bullets(launchPlan.first_five_chapter_promises)}</div>`;
+            }
+            if (launchPlan.tag_delivery_moments && launchPlan.tag_delivery_moments.length) {
+              html += `<div style="margin-top:12px"><strong>Tag Delivery Moments</strong>${bullets(launchPlan.tag_delivery_moments)}</div>`;
+            }
+            if (launchPlan.early_dropoff_risks && launchPlan.early_dropoff_risks.length) {
+              html += `<div style="margin-top:12px"><strong>Early Dropoff Risks</strong>${bullets(launchPlan.early_dropoff_risks)}</div>`;
+            }
+            if (launchPlan.revision_checklist && launchPlan.revision_checklist.length) {
+              html += `<div style="margin-top:12px"><strong>Revision Checklist</strong>${bullets(launchPlan.revision_checklist)}</div>`;
+            }
+            html += `</div>`;
+          }
+
           /* ── Plot summary ─────────────────────────────────── */
           if (plan.plot_summary) {
             html += `<div class="section">
@@ -520,6 +786,39 @@
             </div>`;
           }
 
+          /* ── Serial roadmap ──────────────────────────────── */
+          if (plan.serial_arcs && plan.serial_arcs.length) {
+            html += `<div class="section">
+              <div class="section-label">Serial Arcs</div>
+              ${plan.serial_arcs.map(arc => `
+                <div class="character-card">
+                  <strong>Arc ${esc(arc.arc_number)}: ${esc(arc.title)}</strong>
+                  ${arc.chapter_range ? `<span class="role">${esc(arc.chapter_range)}</span>` : ""}
+                  ${arc.external_goal ? `<p><strong>Goal:</strong> ${esc(arc.external_goal)}</p>` : ""}
+                  ${arc.central_conflict ? `<p><strong>Conflict:</strong> ${esc(arc.central_conflict)}</p>` : ""}
+                  ${arc.progression_rewards && arc.progression_rewards.length ? `<p><strong>Rewards:</strong> ${arc.progression_rewards.map(r => esc(r)).join(", ")}</p>` : ""}
+                  ${arc.major_reversals && arc.major_reversals.length ? `<p><strong>Reversals:</strong> ${arc.major_reversals.map(r => esc(r)).join(", ")}</p>` : ""}
+                  ${arc.cliffhanger_bridge ? `<p><strong>Bridge:</strong> ${esc(arc.cliffhanger_bridge)}</p>` : ""}
+                </div>
+              `).join("")}
+            </div>`;
+          }
+
+          if ((plan.release_plan && plan.release_plan.length) || (plan.retention_strategy && plan.retention_strategy.length) || plan.long_form_roadmap) {
+            html += `<div class="section">
+              <div class="section-label">Release & Retention</div>`;
+            if (plan.release_plan && plan.release_plan.length) {
+              html += `<p><strong>Release Plan</strong></p>${bullets(plan.release_plan)}`;
+            }
+            if (plan.retention_strategy && plan.retention_strategy.length) {
+              html += `<p style="margin-top:10px"><strong>Retention Strategy</strong></p>${bullets(plan.retention_strategy)}`;
+            }
+            if (plan.long_form_roadmap) {
+              html += `<p style="margin-top:10px"><strong>Long-form Roadmap:</strong> ${esc(plan.long_form_roadmap)}</p>`;
+            }
+            html += `</div>`;
+          }
+
           /* ── Characters ───────────────────────────────────── */
           if (plan.characters && plan.characters.length) {
             html += `<div class="section">
@@ -530,6 +829,8 @@
                   <p>${esc(c.description)}</p>
                   ${c.motivations && c.motivations.length ? `<p style="margin-top:4px;font-size:13px;color:#666"><strong>Motivations:</strong> ${c.motivations.map(m => esc(m)).join(", ")}</p>` : ""}
                   ${c.arc ? `<p style="margin-top:4px;font-style:italic;font-size:13px;color:#777">Arc: ${esc(c.arc)}</p>` : ""}
+                  ${c.webnovel_role_hook ? `<p style="margin-top:4px;font-size:13px;color:#666"><strong>Webnovel hook:</strong> ${esc(c.webnovel_role_hook)}</p>` : ""}
+                  ${c.progression_function ? `<p style="margin-top:4px;font-size:13px;color:#666"><strong>Progression function:</strong> ${esc(c.progression_function)}</p>` : ""}
                 </div>
               `).join("")}
             </div>`;
@@ -596,6 +897,30 @@
                     Emotional arc: ${esc(ch.emotional_arc)}
                   </p>`;
                 }
+                if (ch.opening_hook || ch.progression_reward || ch.cliffhanger || ch.new_question_raised || ch.reader_emotion_target || ch.filler_risk) {
+                  html += `<div class="section" style="margin-top:10px">
+                    <div class="section-label">Webnovel Hooks</div>`;
+                  if (ch.opening_hook) html += `<p><strong>Opening hook:</strong> ${esc(ch.opening_hook)}</p>`;
+                  if (ch.progression_reward) html += `<p><strong>Progression reward:</strong> ${esc(ch.progression_reward)}</p>`;
+                  if (ch.new_question_raised) html += `<p><strong>New question:</strong> ${esc(ch.new_question_raised)}</p>`;
+                  if (ch.cliffhanger) html += `<p><strong>Cliffhanger:</strong> ${esc(ch.cliffhanger)}</p>`;
+                  if (ch.reader_emotion_target) html += `<p><strong>Reader emotion:</strong> ${esc(ch.reader_emotion_target)}</p>`;
+                  if (ch.filler_risk) html += `<p><strong>Filler risk:</strong> ${esc(ch.filler_risk)}</p>`;
+                  html += `</div>`;
+                }
+                if (ch.tags_served && ch.tags_served.length) {
+                  html += `<div class="section" style="margin-top:10px">
+                    <div class="section-label">Tags Served</div>
+                    ${tags(ch.tags_served)}
+                  </div>`;
+                }
+                if (ch.comment_prompt || ch.power_stone_pitch) {
+                  html += `<div class="section" style="margin-top:10px">
+                    <div class="section-label">Reader Interaction</div>`;
+                  if (ch.comment_prompt) html += `<p><strong>Comment prompt:</strong> ${esc(ch.comment_prompt)}</p>`;
+                  if (ch.power_stone_pitch) html += `<p><strong>Vote prompt:</strong> ${esc(ch.power_stone_pitch)}</p>`;
+                  html += `</div>`;
+                }
                 html += `</div>`;
               });
             } else {
@@ -619,7 +944,7 @@
             html += `<hr class="divider">
             <div class="section">
               <div class="section-label">Publisher Notes</div>
-              <p>${esc(ms.publisher_notes)}</p>
+              <div class="note-body">${esc(ms.publisher_notes)}</div>
             </div>`;
           }
 
@@ -634,12 +959,16 @@
 
         $content.innerHTML = html;
         $content.classList.remove("hidden");
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
+        scheduleDetailPoll(storyId, s.status);
+        if (!options.silent) {
+          window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+          });
+        }
       } catch (err) {
         $loading.classList.add("hidden");
+        clearDetailPoll();
         $error.textContent = "Failed to load story: " + err.message;
         $error.classList.remove("hidden");
       }

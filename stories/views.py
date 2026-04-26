@@ -33,6 +33,7 @@ from .mongodb import (
     release_continue_lock,
     save_generated_profile,
     set_story_hidden,
+    update_story_progress,
     update_story_status,
 )
 from .prompts import build_bio_context
@@ -65,14 +66,67 @@ def _terminal_status(state: dict) -> str:
     return "awaiting_continue"
 
 
+def _progress_event(
+    stage: str,
+    message: str,
+    *,
+    state: dict | None = None,
+    percent: int = 0,
+    error: str = "",
+) -> dict:
+    state = state or {}
+    total = len(state.get("chapters_to_write") or []) or int(state.get("num_chapters", 0) or 0)
+    current = int(state.get("current_chapter_index", 0) or 0)
+    completed = len(state.get("final_chapters") or []) or current
+    target = int(state.get("target_chapter_index") or total or 0)
+    event = {
+        "stage": stage,
+        "message": message,
+        "current_chapter": current + 1 if total and current < total else None,
+        "current_chapter_index": current,
+        "completed_chapters": completed,
+        "target_chapter_index": target,
+        "total_chapters": total,
+        "percent": percent,
+    }
+    if error:
+        event["error"] = error
+    return event
+
+
 async def _run_graph_async(graph, story_id: str, initial_state: dict) -> None:
     """Execute a compiled LangGraph and persist the terminal status."""
     try:
-        update_story_status(story_id, "running")
+        update_story_status(
+            story_id,
+            "running",
+            progress=_progress_event(
+                "starting",
+                "Starting AI story pipeline.",
+                state=initial_state,
+                percent=1,
+            ),
+        )
         logger.info("Story %s — graph execution started", story_id)
 
         result = await graph.ainvoke(initial_state)
         final_status = _terminal_status(result)
+        if final_status == "completed":
+            terminal_progress = _progress_event(
+                "completed",
+                "Story generation completed.",
+                state=result,
+                percent=100,
+            )
+        else:
+            total = len(result.get("chapters_to_write") or []) or int(result.get("num_chapters", 0) or 0)
+            current = int(result.get("current_chapter_index", 0) or 0)
+            terminal_progress = _progress_event(
+                "awaiting_continue",
+                "Batch complete. Waiting for continuation request.",
+                state=result,
+                percent=int((current / total) * 100) if total else 100,
+            )
 
         # Close out the most recent batch_log entry if any.
         db_doc = get_story(story_id)
@@ -91,6 +145,7 @@ async def _run_graph_async(graph, story_id: str, initial_state: dict) -> None:
             state=result,
             manuscript=result.get("final_manuscript"),
             batch_log=batch_log or None,
+            progress=terminal_progress,
         )
         logger.info(
             "Story %s — graph finished with status %s (chapters=%d/%d)",
@@ -100,9 +155,19 @@ async def _run_graph_async(graph, story_id: str, initial_state: dict) -> None:
             len(result.get("chapters_to_write") or []),
         )
 
-    except Exception:
+    except Exception as exc:
         logger.exception("Story %s — graph execution failed", story_id)
-        update_story_status(story_id, "failed")
+        update_story_status(
+            story_id,
+            "failed",
+            progress=_progress_event(
+                "failed",
+                "Story generation failed. Check server logs for traceback.",
+                state=initial_state,
+                percent=0,
+                error=str(exc),
+            ),
+        )
 
 
 def _launch_graph(graph, story_id: str, initial_state: dict) -> None:
@@ -166,6 +231,27 @@ def create_story(request):
     requested_initial = data.get("initial_chapters") or default_initial
     initial_chapters = max(1, min(int(requested_initial), int(data["num_chapters"])))
 
+    webnovel_preferences = {
+        "platform_genre": data.get("platform_genre", ""),
+        "lead_type": data.get("lead_type", ""),
+        "target_reader": data.get("target_reader", ""),
+        "content_rating": data.get("content_rating", ""),
+        "tags": data.get("tags", []),
+        "must_include_tropes": data.get("must_include_tropes", []),
+        "must_avoid_tropes": data.get("must_avoid_tropes", []),
+        "release_goal": data.get("release_goal", ""),
+    }
+    initial_progress = {
+        "stage": "queued",
+        "message": "Story generation queued.",
+        "current_chapter": 1,
+        "current_chapter_index": 0,
+        "completed_chapters": 0,
+        "target_chapter_index": initial_chapters,
+        "total_chapters": int(data["num_chapters"]),
+        "percent": 0,
+    }
+
     # Persist initial record
     create_story_record(
         story_id,
@@ -180,11 +266,13 @@ def create_story(request):
         "book_title": data["book_title"],
         "book_description": data["book_description"],
         "num_chapters": data["num_chapters"],
+        "webnovel_preferences": webnovel_preferences,
         "author_profile": author_profile,
         "emotional_guidelines": emotional_guidelines,
         "expert_styles": expert_styles,
         "story_plan": {},
         "chapters_to_write": [],
+        "launch_chapter_plan": {},
         "current_chapter_index": 0,
         "current_draft": "",
         "review_feedback": "",
@@ -196,6 +284,7 @@ def create_story(request):
         "continuity_ledger": {},
         "batch_log": [],
         "final_manuscript": {},
+        "progress": initial_progress,
         "status": "pending",
         "story_id": story_id,
         "error": "",
@@ -211,6 +300,7 @@ def create_story(request):
             "profile_used": bool(profile_id),
             "initial_chapters": initial_chapters,
             "num_chapters": data["num_chapters"],
+            "webnovel_preferences": webnovel_preferences,
         },
         status=status.HTTP_202_ACCEPTED,
     )
@@ -291,6 +381,13 @@ def continue_story_view(request, story_id: str):
     state["current_draft"] = ""
     state["review_feedback"] = ""
     state["retry_count"] = 0
+    progress = _progress_event(
+        "continue_queued",
+        f"Continuation queued for chapters {current + 1}-{new_target}.",
+        state=state,
+        percent=int((current / total) * 100) if total else 0,
+    )
+    state["progress"] = progress
 
     # Record a new batch_log entry before we kick off the run.
     batch_entry = {
@@ -301,6 +398,7 @@ def continue_story_view(request, story_id: str):
         "status": "running",
     }
     append_batch_log(story_id, batch_entry)
+    update_story_progress(story_id, progress)
 
     _launch_graph(continue_graph, story_id, state)
 
@@ -362,12 +460,20 @@ def unhide_story_view(request, story_id: str):
 def list_stories_view(request):
     """GET /api/stories/"""
     docs = list_stories()
+    def _progress(doc: dict) -> dict:
+        progress = dict(doc.get("progress") or {})
+        updated_at = progress.get("updated_at")
+        if hasattr(updated_at, "isoformat"):
+            progress["updated_at"] = updated_at.isoformat()
+        return progress
+
     results = [
         {
             "story_id": doc["_id"],
             "title": doc["title"],
             "status": doc["status"],
             "num_chapters": doc["num_chapters"],
+            "progress": _progress(doc),
             "created_at": doc["created_at"].isoformat(),
             "updated_at": doc["updated_at"].isoformat(),
         }
