@@ -248,7 +248,7 @@ def get_profile(profile_id: str) -> Optional[Dict[str, Any]]:
 def list_profiles(*, limit: int = 50, skip: int = 0) -> List[Dict[str, Any]]:
     cursor = (
         col(COL_PROFILES)
-        .find({}, {"few_shot_samples": 0})
+        .find({"hidden": {"$ne": True}}, {"few_shot_samples": 0})
         .sort("created_at", DESCENDING)
         .skip(skip)
         .limit(limit)
@@ -261,6 +261,14 @@ def update_profile(profile_id: str, fields: Dict[str, Any]) -> Optional[Dict[str
     return col(COL_PROFILES).find_one_and_update(
         {"_id": profile_id},
         {"$set": fields},
+        return_document=True,
+    )
+
+
+def set_profile_hidden(profile_id: str, hidden: bool) -> Optional[Dict[str, Any]]:
+    return col(COL_PROFILES).find_one_and_update(
+        {"_id": profile_id},
+        {"$set": {"hidden": hidden, "updated_at": datetime.datetime.utcnow()}},
         return_document=True,
     )
 

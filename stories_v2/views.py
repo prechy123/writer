@@ -630,6 +630,22 @@ def unhide_story_view(request, story_id: str):
     return Response({"ok": True, "story_id": story_id, "hidden": False})
 
 
+@api_view(["POST"])
+def hide_profile_view(request, profile_id: str):
+    updated = mongo.set_profile_hidden(profile_id, True)
+    if not updated:
+        return Response({"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"ok": True, "profile_id": profile_id, "hidden": True})
+
+
+@api_view(["POST"])
+def unhide_profile_view(request, profile_id: str):
+    updated = mongo.set_profile_hidden(profile_id, False)
+    if not updated:
+        return Response({"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"ok": True, "profile_id": profile_id, "hidden": False})
+
+
 @api_view(["GET"])
 def skeleton_view(request, story_id: str):
     """GET /api/v2/stories/<id>/skeleton/  — the full engine state."""

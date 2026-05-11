@@ -264,10 +264,13 @@ def get_profile(profile_id: str) -> Optional[Dict[str, Any]]:
 
 
 def list_profiles() -> List[Dict[str, Any]]:
-    """List all profiles (without the full writing samples or LLM outputs)."""
+    """List all profiles (without the full writing samples or LLM outputs).
+
+    Hidden profiles (``hidden == True``) are filtered out.
+    """
     db = get_db()
     cursor = db.profiles.find(
-        {},
+        {"hidden": {"$ne": True}},
         {
             "writing_samples": 0,
             "author_profile": 0,
@@ -276,3 +279,16 @@ def list_profiles() -> List[Dict[str, Any]]:
         },
     ).sort("created_at", -1)
     return list(cursor)
+
+
+def set_profile_hidden(profile_id: str, hidden: bool) -> Optional[Dict[str, Any]]:
+    """Toggle the ``hidden`` flag on a profile. Returns the updated document."""
+    db = get_db()
+    return db.profiles.find_one_and_update(
+        {"_id": profile_id},
+        {"$set": {
+            "hidden": hidden,
+            "updated_at": datetime.datetime.utcnow(),
+        }},
+        return_document=ReturnDocument.AFTER,
+    )

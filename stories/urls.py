@@ -14,4 +14,6 @@ urlpatterns = [
     path("profiles/", views.list_profiles_view, name="profile-list"),
     path("profiles/generate/", views.generate_profile_view, name="profile-generate"),
     path("profiles/<str:profile_id>/", views.get_profile_view, name="profile-detail"),
+    path("profiles/<str:profile_id>/hide/", views.hide_profile_view, name="profile-hide"),
+    path("profiles/<str:profile_id>/unhide/", views.unhide_profile_view, name="profile-unhide"),
 ]

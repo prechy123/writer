@@ -20,6 +20,8 @@ urlpatterns = [
     path("profiles/", views.list_profiles_view, name="v2-profiles-list"),
     path("profiles/generate/", views.generate_profile_view, name="v2-profile-generate"),
     path("profiles/<str:profile_id>/", views.get_profile_view, name="v2-profile-detail"),
+    path("profiles/<str:profile_id>/hide/", views.hide_profile_view, name="v2-profile-hide"),
+    path("profiles/<str:profile_id>/unhide/", views.unhide_profile_view, name="v2-profile-unhide"),
 
     # Stories
     path("stories/", views.list_stories_view, name="v2-stories-list"),

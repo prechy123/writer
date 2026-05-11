@@ -32,6 +32,7 @@ from .mongodb import (
     list_stories,
     release_continue_lock,
     save_generated_profile,
+    set_profile_hidden,
     set_story_hidden,
     update_story_progress,
     update_story_status,
@@ -588,6 +589,36 @@ def list_profiles_view(request):
         for doc in docs
     ]
     return Response(results)
+
+
+@api_view(["POST"])
+def hide_profile_view(request, profile_id: str):
+    """POST /api/profiles/<profile_id>/hide/
+
+    Soft-hides a profile so it's excluded from ``GET /api/profiles/``.
+    The document itself is preserved and still reachable at
+    ``GET /api/profiles/<profile_id>/``.
+    """
+    updated = set_profile_hidden(profile_id, True)
+    if updated is None:
+        return Response(
+            {"error": "Profile not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    return Response({"profile_id": profile_id, "hidden": True})
+
+
+@api_view(["POST"])
+def unhide_profile_view(request, profile_id: str):
+    """POST /api/profiles/<profile_id>/unhide/
+
+    Restores a hidden profile to the default listing.
+    """
+    updated = set_profile_hidden(profile_id, False)
+    if updated is None:
+        return Response(
+            {"error": "Profile not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    return Response({"profile_id": profile_id, "hidden": False})
 
 
 # ---------------------------------------------------------------------------
