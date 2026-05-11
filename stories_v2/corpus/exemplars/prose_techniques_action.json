@@ -1,0 +1,26 @@
+[
+  {
+    "id": "tech_action_01",
+    "source": "original_technique_example",
+    "techniques": ["visceral_action", "sentence_variety", "sensory_anchoring"],
+    "genres": ["generic"],
+    "pov": "third_limited",
+    "pacing": "breakneck",
+    "emotion_tags": ["fear", "anger", "surprise"],
+    "style_register": "casual",
+    "text": "The first hit landed wrong. He felt it in his teeth before his ribs caught up. The second one he saw coming and ducked under, which put his shoulder into the man's stomach by accident more than plan, and they both went down hard onto the tile, his knee on a crack, the man's elbow somewhere near his ear. Glass. Something glass had broken on the way down, he didn't remember what. He clawed at the man's collar and missed. Got fabric the second time. The man was bigger. Heavier. Smelled like cigarettes and the inside of a car that had sat in the sun all day. Damon shoved his forearm under the chin and pushed up, hard, until the head went back enough that the man stopped grabbing for him and started grabbing for his own throat instead. Then he rolled. He rolled because he was not going to die under a man on a kitchen floor.",
+    "notes": "Sensory chaos in present-tense urgency. Reader catches up to the protagonist, not ahead. Order of perception (teeth before ribs) is psychologically true under panic."
+  },
+  {
+    "id": "tech_action_02",
+    "source": "original_technique_example",
+    "techniques": ["visceral_action", "sentence_variety", "interior_monologue"],
+    "genres": ["cultivation", "litrpg", "isekai", "light_novel", "generic"],
+    "pov": "third_limited",
+    "pacing": "breakneck",
+    "emotion_tags": ["anticipation", "fear", "joy"],
+    "style_register": "casual",
+    "text": "He moved.\nNot fast, by anyone else's standards. Just faster than he had ever moved before. Three steps before his body realised it was committed. The blade was already where his face had been. He felt the wind of it on the side of his cheek, and his heel skidded on dust, and he reset before he could think about resetting.\nGood. That was good. That had worked.\nHe almost laughed, which was an idiotic thing to almost do mid-fight, but the laugh was already in his throat by the time the second blade swung in from his right, and his body, somehow, was already three feet away from where the blade arrived. He had not chosen to move. The technique had moved him. He landed in a crouch he didn't know he could land in, breathing hard, watching the swordsman recalibrate.\nThe technique. The technique was working.\nHe stood up slowly. He stopped smiling.\n\"Again,\" he said.",
+    "notes": "Progression-fantasy beat: a power moment shown through body experience rather than narration. Interior thought ('Good. That was good.') in fragments. The smile that drops at the end signals a shift the reader will pay for later."
+  }
+]

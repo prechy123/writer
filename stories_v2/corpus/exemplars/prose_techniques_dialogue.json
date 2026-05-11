@@ -1,0 +1,26 @@
+[
+  {
+    "id": "tech_dialogue_01",
+    "source": "original_technique_example",
+    "techniques": ["interruption", "contraction_dense_dialogue", "subtext"],
+    "genres": ["generic"],
+    "pov": "third_limited",
+    "pacing": "breakneck",
+    "emotion_tags": ["anger", "fear"],
+    "style_register": "casual",
+    "text": "\"You said you'd call.\"\n\"I did call.\"\n\"After. Four days after.\"\n\"Lia, I was\"\n\"Don't.\" She turned her face away from him, then back, like she'd thought better of giving him even that. \"Don't Lia me. You don't get to do that voice right now.\"\n\"What voice.\"\n\"That one. That one you just did. Where you say my name like I'm being unreasonable and you're the patient one.\"\n\"I wasn't.\"\n\"You were.\"\n\"Okay.\" He sat down on the step next to her, but not close. The dog watched them from the doorway, ears flat. \"Okay. I was.\"\nShe didn't answer. She wiped her nose on the back of her wrist, which she only did when she was furious, and which he had not seen her do in eleven months.",
+    "notes": "Dialogue interrupted twice. Contractions everywhere. Subtext carried by the small detail at the end (eleven months) that reframes the whole exchange."
+  },
+  {
+    "id": "tech_dialogue_02",
+    "source": "original_technique_example",
+    "techniques": ["interruption", "silence_and_deflection"],
+    "genres": ["generic"],
+    "pov": "third_limited",
+    "pacing": "balanced",
+    "emotion_tags": ["sadness", "trust"],
+    "style_register": "casual",
+    "text": "\"How was the appointment?\"\nHis father didn't look up from the newspaper. \"Fine.\"\n\"Fine like good news or fine like\"\n\"Fine.\"\nGabe waited. His father turned the page. The crease of the fold was perfect, the way the man had folded newspapers for forty years. Gabe thought about the dozen things he could say and the two or three he wanted to. He chose none of them.\nHe poured another cup of coffee. He set it down within reach. He sat back down across the table.\nAfter a long time his father said, without looking up, \"They want to do another scan.\"\nGabe nodded, even though no one was watching him nod.",
+    "notes": "Silence as content. Same character refuses to speak the real thing twice, then speaks half of it without preamble. Reader fills the rest."
+  }
+]

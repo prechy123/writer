@@ -1,0 +1,26 @@
+[
+  {
+    "id": "tech_interior_01",
+    "source": "original_technique_example",
+    "techniques": ["interior_monologue", "show_dont_tell", "mid_paragraph_tonal_shift"],
+    "genres": ["generic", "literary"],
+    "pov": "first",
+    "pacing": "slow_burn",
+    "emotion_tags": ["sadness", "anticipation"],
+    "style_register": "casual",
+    "text": "There is a thing my father did, every year, on the first cold morning, which was to stand at the back door in his slippers and look at the yard for about a minute, and then come back inside without saying anything. I asked him once what he was doing. He said he was checking. I asked what for. He said nothing in particular. He said it the way he said most things, which was with the expectation that I would not ask twice, and I didn't. He is dead now. I find that I have started doing it. The first cold morning came on Tuesday. I had not planned to do anything in particular. I just stood at the back door in my own slippers and looked at my own yard, and what came up in me was something so close to him that I had to sit down on the kitchen tile after, and I did not get up for a while.",
+    "notes": "First-person interiority that earns its emotion by withholding it. No 'I was sad'. The sitting down does the work."
+  },
+  {
+    "id": "tech_interior_02",
+    "source": "original_technique_example",
+    "techniques": ["interior_monologue", "subtext", "sentence_variety"],
+    "genres": ["light_novel", "romance", "generic"],
+    "pov": "first",
+    "pacing": "balanced",
+    "emotion_tags": ["joy", "fear", "anticipation"],
+    "style_register": "casual",
+    "text": "Two days. I had two days left in this country and approximately zero plans for either of them. Yuki had said she was busy. Yuki said she was busy a lot. Yuki had also, last week, taken the train forty minutes out to a coffee shop I had mentioned once, in passing, because I had wanted to see the river behind it, and she had sat across from me for three hours and watched me try to eat soba like a person who knew what they were doing. So. Yuki was busy. Sure. I closed my notebook. I opened it again. I closed it. The bus came. I got on the bus. I did not text her. I texted her. I deleted what I had texted her. I sent something else. I sat on the bus and watched the city slide past and thought about the river behind that coffee shop and the way she had not once said anything about how badly I was eating the noodles.",
+    "notes": "Interior chatter as character. Comedic timing inside emotional stakes. Paragraph rhythm: small repeated actions (closed, opened, closed) doing more work than any 'I felt nervous' could."
+  }
+]

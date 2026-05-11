@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stories v2</title>
+<style>
+  /* ── Newspaper-style palette (matches v1 dashboard) ──────────────── */
+  :root {
+    --bg: #f5f0eb;            /* cream background */
+    --bg-2: #faf8f5;          /* pale cream */
+    --paper: #ffffff;
+    --paper-2: #fdfbf7;
+    --border: #d6d0c8;
+    --border-soft: #eeebe6;
+    --text: #1a1a1a;
+    --text-2: #2c2c2c;
+    --muted: #7c6f64;
+    --muted-2: #999;
+    --accent: #8a6f55;        /* warm tan */
+    --accent-2: #6d563f;
+    --accent-pale: #ebe4dc;
+    --ok-bg: #e6f4ea;
+    --ok-fg: #1e7e34;
+    --warn-bg: #fff3cd;
+    --warn-fg: #856404;
+    --err-bg: #f8d7da;
+    --err-fg: #a71d2a;
+    --info-bg: #d9e7f5;
+    --info-fg: #1d4e89;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); min-height: 100vh; }
+  body { font-family: var(--serif); font-size: 15px; line-height: 1.7; }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { color: var(--text); text-decoration: underline; }
+
+  /* ── Buttons ─────────────────────────────────────────────────────── */
+  button, .btn {
+    font-family: var(--sans);
+    font-size: 13px; font-weight: 500;
+    color: var(--accent-2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+    text-transform: none;
+  }
+  button:hover, .btn:hover { background: var(--accent-pale); color: var(--text); border-color: var(--accent); }
+  button.primary, .btn.primary {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover, .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+  button.danger { background: #fff; border-color: var(--err-bg); color: var(--err-fg); }
+  button.danger:hover { background: var(--err-bg); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Inputs ──────────────────────────────────────────────────────── */
+  input, textarea, select {
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--text);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 8px 10px;
+    width: 100%;
+    line-height: 1.5;
+  }
+  textarea { font-family: var(--sans); min-height: 130px; resize: vertical; line-height: 1.6; }
+  textarea.tall { min-height: 200px; }
+  textarea.xtall { min-height: 300px; }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(138,111,85,0.12);
+  }
+  input::placeholder, textarea::placeholder { color: #b8ab9d; font-style: italic; }
+
+  /* ── Header ──────────────────────────────────────────────────────── */
+  header {
+    background: var(--paper);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex; align-items: center; gap: 24px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+  header h1 {
+    font-family: var(--serif);
+    font-size: 22px; font-weight: 700; letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  header nav { display: flex; gap: 4px; margin-left: 8px; font-family: var(--sans); }
+  header nav a {
+    padding: 6px 14px; border-radius: 4px; color: var(--muted); font-size: 13px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  header nav a:hover { color: var(--text); text-decoration: none; }
+  header nav a.active { background: var(--accent-pale); color: var(--accent-2); }
+  .spacer { flex: 1; }
+
+  /* ── Main paper layout ──────────────────────────────────────────── */
+  main { padding: 40px 16px; max-width: 920px; margin: 0 auto; }
+  @media (max-width: 840px) { main { padding: 20px 12px; } }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 28px; font-weight: 700; letter-spacing: -0.3px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  h3 {
+    font-family: var(--serif);
+    font-size: 18px; font-weight: 700; color: var(--text);
+    margin: 24px 0 10px;
+  }
+  p { font-size: 15px; line-height: 1.7; color: var(--text-2); }
+
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .grid { display: grid; gap: 16px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+  /* ── Cards = paper sheets ───────────────────────────────────────── */
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    padding: 24px 28px;
+  }
+  @media (max-width: 840px) { .card { padding: 20px 18px; } }
+  .card.clickable { cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+  .card.clickable:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,0.08); transform: translateY(-1px); }
+  .pick-card { padding: 32px 28px; }
+  .pick-card h3 { margin-top: 0; font-size: 20px; }
+  .pick-card .pick-tag {
+    font-family: var(--sans);
+    color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 10px;
+  }
+
+  .muted { color: var(--muted); font-size: 13px; font-family: var(--sans); }
+  .key { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+
+  /* ── Badges (pale paper tags) ───────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    font-family: var(--sans);
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 3px 10px; border-radius: 12px;
+    background: var(--border-soft); color: var(--muted);
+  }
+  .badge.pending          { background: var(--border-soft); color: var(--muted); }
+  .badge.architecting,
+  .badge.planning,
+  .badge.writing,
+  .badge.running          { background: var(--warn-bg); color: var(--warn-fg); }
+  .badge.awaiting_continue{ background: var(--accent-pale); color: var(--accent-2); }
+  .badge.completed        { background: var(--ok-bg); color: var(--ok-fg); }
+  .badge.failed           { background: var(--err-bg); color: var(--err-fg); }
+  .badge.main             { background: var(--accent-pale); color: var(--accent-2); }
+  .badge.recurring        { background: var(--info-bg); color: var(--info-fg); }
+  .badge.side             { background: var(--border-soft); color: var(--muted); }
+
+  /* ── Progress bar ──────────────────────────────────────────────── */
+  .progress { width: 100%; height: 6px; background: var(--border-soft); border-radius: 6px; overflow: hidden; margin-top: 10px; }
+  .progress-bar { height: 100%; background: var(--accent); transition: width .3s ease; }
+
+  /* ── Form fields ───────────────────────────────────────────────── */
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block; font-family: var(--sans);
+    font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.7px;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .field .hint {
+    font-size: 12px; color: var(--muted); margin-top: 5px; font-style: italic;
+    font-family: var(--serif);
+  }
+  .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+
+  /* ── Chips (pickers) ───────────────────────────────────────────── */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 99px;
+    background: var(--bg); border: 1px solid var(--border);
+    font-family: var(--sans); font-size: 13px; color: var(--text-2);
+    cursor: pointer; user-select: none; margin: 2px 4px 2px 0;
+    transition: background .15s, border-color .15s;
+  }
+  .chip:hover { background: var(--accent-pale); border-color: var(--accent); }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── Toast ─────────────────────────────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--paper); border: 1px solid var(--border); border-left-width: 4px;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 12px 18px; max-width: 380px;
+    font-family: var(--sans); font-size: 14px; color: var(--text);
+    opacity: 0; transform: translateY(10px);
+    transition: opacity .2s, transform .2s;
+    pointer-events: none; z-index: 200;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .toast.ok { border-left-color: var(--ok-fg); }
+  .toast.error { border-left-color: var(--err-fg); }
+
+  /* ── Chapter accordion ─────────────────────────────────────────── */
+  .chapter {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    margin-bottom: 18px; overflow: hidden;
+  }
+  .chapter-head {
+    padding: 18px 24px; cursor: pointer;
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid transparent;
+    transition: background .15s;
+  }
+  .chapter.open .chapter-head { border-bottom-color: var(--border-soft); background: var(--paper-2); }
+  .chapter-head:hover { background: var(--bg-2); }
+  .chapter-head h3 { margin: 0; flex: 1; font-size: 18px; }
+  .chapter-body {
+    padding: 24px 32px;
+    display: none;
+    font-family: var(--serif);
+    font-size: 17px; line-height: 1.85;
+    color: var(--text-2);
+  }
+  .chapter.open .chapter-body { display: block; }
+  .chapter-body p { margin: 0 0 1.1em; }
+  .chapter-body p:first-of-type::first-letter {
+    font-size: 3em; font-weight: 700;
+    float: left; line-height: 0.9; padding: 4px 8px 0 0;
+    color: var(--accent-2);
+  }
+
+  /* ── Live events panel ────────────────────────────────────────── */
+  .events-panel {
+    background: var(--paper);
+    border: 1px solid var(--border); border-radius: 3px;
+    height: 400px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .events-panel-head {
+    padding: 12px 18px; border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--sans); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--muted);
+    background: var(--paper-2);
+  }
+  .events-list { flex: 1; overflow-y: auto; padding: 10px 18px; font-family: var(--mono); font-size: 12px; }
+  .event { margin-bottom: 6px; line-height: 1.5; padding: 4px 0; border-bottom: 1px dashed var(--border-soft); }
+  .event:last-child { border-bottom: none; }
+  .event .ts { color: var(--muted); margin-right: 10px; }
+  .event .type { color: var(--accent-2); margin-right: 10px; font-weight: 600; }
+  .event .payload { color: var(--text-2); }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.live { background: var(--ok-fg); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ── Tabs ──────────────────────────────────────────────────────── */
+  .tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+    font-family: var(--sans);
+  }
+  .tab {
+    padding: 12px 18px; cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    font-size: 13px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    transition: color .15s, border-color .15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent-2); border-bottom-color: var(--accent); }
+
+  /* ── Misc ──────────────────────────────────────────────────────── */
+  pre {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg-2); border: 1px solid var(--border-soft);
+    border-radius: 4px; padding: 14px;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+    color: var(--text-2);
+  }
+  .character-card .name { font-weight: 700; font-size: 15px; }
+  .character-card .role { color: var(--muted); font-size: 13px; font-family: var(--sans); }
+  .character-card .desc { font-size: 14px; line-height: 1.6; color: var(--text-2); margin-top: 4px; }
+  .breadcrumb {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--muted); margin-bottom: 16px;
+    text-transform: uppercase; letter-spacing: 0.6px;
+  }
+  .breadcrumb a { color: var(--muted); }
+  .breadcrumb a:hover { color: var(--text); }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(60, 50, 40, 0.5); backdrop-filter: blur(2px);
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .modal {
+    background: var(--paper);
+    border: 1px solid var(--border); border-radius: 4px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    padding: 28px;
+    max-width: 720px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin-top: 0; }
+
+  .scene-card {
+    background: var(--paper);
+    border: 1px solid var(--border); border-radius: 3px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    padding: 16px 20px; margin-bottom: 12px;
+  }
+  .scene-card .scene-head {
+    display: flex; gap: 12px; align-items: center; margin-bottom: 8px;
+    font-family: var(--sans); font-size: 13px;
+  }
+  .scene-prose { font-family: var(--serif); font-size: 15px; line-height: 1.85; color: var(--text-2); white-space: pre-wrap; padding: 8px 0; }
+  .findings { font-family: var(--sans); font-size: 12px; }
+  .finding { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--border-soft); }
+  .sev-warn  { color: var(--warn-fg); font-weight: 600; }
+  .sev-error { color: var(--err-fg);  font-weight: 600; }
+  .sev-info  { color: var(--info-fg); font-weight: 600; }
+
+  details { margin-top: 8px; }
+  summary { cursor: pointer; font-family: var(--sans); font-size: 12px; color: var(--muted); }
+  summary:hover { color: var(--text); }
+
+  /* ── Tooltip system ────────────────────────────────────────────── */
+  .tip-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--accent-pale); color: var(--accent-2);
+    font-family: var(--sans);
+    font-size: 10px; font-weight: 700;
+    margin-left: 6px; cursor: help; user-select: none;
+    border: 1px solid var(--border); vertical-align: middle;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .tip-icon:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .has-tip { position: relative; cursor: help; }
+  .has-tip[data-tip]:hover::after,
+  .tip-icon[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--paper);
+    border: 1px solid var(--accent);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-2);
+    width: 300px; max-width: 90vw;
+    white-space: normal; text-align: left;
+    line-height: 1.55;
+    z-index: 300;
+    pointer-events: none;
+    letter-spacing: 0; text-transform: none;
+  }
+  .has-tip[data-tip]:hover::before,
+  .tip-icon[data-tip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--accent);
+    z-index: 301;
+    pointer-events: none;
+  }
+  .tip-below[data-tip]:hover::after { bottom: auto; top: calc(100% + 8px); }
+  .tip-below[data-tip]:hover::before { bottom: auto; top: calc(100% + 2px); border-top-color: transparent; border-bottom-color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stories v2</h1>
+  <nav>
+    <a href="#/stories" data-nav="stories">Stories</a>
+    <a href="#/profiles" data-nav="profiles">Profiles</a>
+  </nav>
+  <div class="spacer"></div>
+  <a class="btn primary" href="#/stories/new">+ New Story</a>
+</header>
+
+<main id="app"></main>
+<div id="toast" class="toast"></div>
+
+<script>
+/* ============================================================
+ * stories_v2 single-page UI
+ * ============================================================ */
+
+const API = '/api/v2';
+const app = document.getElementById('app');
+const toastEl = document.getElementById('toast');
+
+// ---- Toast --------------------------------------------------
+let toastTimer;
+function toast(message, type = 'ok') {
+  toastEl.className = `toast ${type} show`;
+  toastEl.textContent = message;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3000);
+}
+
+// ---- API helper --------------------------------------------
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(`${API}${path}`, opts);
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    const msg = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+// ---- Helpers -----------------------------------------------
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtDate = s => { if (!s) return ''; try { return new Date(s).toLocaleString(); } catch { return s; } };
+function setActiveNav(name) { document.querySelectorAll('header nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === name)); }
+const STATUS_LABELS = { pending: 'Queued', architecting: 'Architecting', planning: 'Planning', writing: 'Writing', running: 'Running', awaiting_continue: 'Awaiting continue', completed: 'Completed', failed: 'Failed' };
+
+/* ============================================================
+ * Tooltips — explanations for every input and output
+ * ============================================================ */
+const TOOLTIPS = {
+  // --- Story basics ---
+  title: "The book's working title. Shown to readers on the story page.",
+  premise: "2-4 sentence pitch. The Architect uses this as the seed for the macro 4-act arc plan. Specific premises (named character + concrete stakes) produce far better stories than vague ones.",
+  numChapters: "Total chapters the engine plans. The Architect divides them across 4 acts (~25% discovery, 35% escalation, 25% revelation, 15% catharsis). You don't have to write them all now — see 'Initial batch'.",
+  initialBatch: "How many chapters to write right now. The rest stay queued; you click 'Continue' on the story page to write more. Smaller batches = faster feedback, cheaper retries.",
+  targetWords: "Soft target per chapter (no hard floor). The Pacing critic flags 'rushed' or 'padded' if a scene drifts more than ±30% from this number, but the engine never auto-pads to hit a quota.",
+  pov: "First: 'I walked.' Third limited: 'Mara walked.' (web-novel default) Third omniscient: narrator floats. Multi-POV: each scene assigns its own POV character — best for ensemble stories.",
+  tense: "Past tense is the web-novel norm and what most readers expect. Present tense gives a more immediate, breathless feel but is harder to sustain across long books.",
+  genres: "Picks the technique exemplars + arc-shape conventions. Multi-select. Affects everything downstream — milestone density, magic-system requirements, pacing defaults.",
+  tone: "Emotional baseline. The Empath uses this to seed reader-emotion targets per scene (e.g. 'cathartic' tilts the catharsis act toward joy + relief vectors).",
+  profileId: "Optional reusable author-voice fingerprint. If set, the Scene Writer bakes your voice into the NARRATIVE voice — not into character dialogue (each character keeps their own voice).",
+
+  // --- Quick characters ---
+  charName: "Required. Used as the character_id reference in milestones, scene beats, and relationships.",
+  charRole: "Short label: protagonist, mentor, rival, mother, stableman... Helps the Architect place this character in the macro arc.",
+  charTrait: "One vivid trait. The richer this is, the less generic Character Forge will be when filling in motivations + arc + voice.",
+  charSampleLine: "A verbatim line this character could plausibly say. Used as a few-shot anchor whenever the Scene Writer drafts their dialogue. This is the single highest-leverage character field.",
+
+  // --- Deep characters ---
+  charTier: "Main = POV-eligible, full voice fingerprint + mood vectors tracked every scene (5-8 sample lines recommended). Recurring = appears in 3+ chapters, voice fingerprint + mood tracking when present (3-5 sample lines). Side = 1-2 appearances, lightweight stub, no mood tracking.",
+  charAge: "Any format: '17', 'mid-thirties', 'ancient', '?'. The Continuity refresher ages characters across long timelines.",
+  charPronouns: "How the narrator refers to this character. Free-form: he/him, she/her, they/them, xe/xem, etc.",
+  charBackground: "2-4 sentences of formative history. Anchors motivations + voice. Specific beats ('lost her father at 16 to silicosis') beat generic claims ('had a hard childhood').",
+  charMotivations: "What they want, in priority order. One per line. The Architect weaves these into the arc plan and scene goals.",
+  charFears: "What they avoid or run from. Drives the Goal-Conflict-Disaster engine on scenes they appear in.",
+  charArc: "How this character changes by the end. The Architect plots delivery of this change against the macro arc.",
+  charSpeechTraits: "Formality, dialect markers, sentence-length tendency, idioms. Used by the voice extractor when sample_lines is empty — but sample lines beat description.",
+  charSampleLines: "5-8 verbatim lines for main, 3-5 for recurring. These are the strongest few-shot anchors in the system. If you only fill ONE voice field, fill this one.",
+  charBannedPhrases: "Phrases this character would NEVER say. The Voice critic flags any draft that puts these in their mouth and the Editor rewrites them.",
+  charPortrait: "1-2 sentences shown to readers on the story page. Visual + vibe, not biography.",
+
+  // --- World ---
+  worldSetting: "One paragraph: time, place, scale, mood. The Scene Writer treats this as the anchor every scene must respect. Don't be generic.",
+  worldTimePeriod: "Specific: '1894-1895', 'late Tang dynasty', '200 years after the Severance'.",
+  worldTech: "Available technology. Drives banned_anachronisms enforcement — the Scene Writer won't reference things that don't exist in your world.",
+  worldSocial: "Power structures, class system, family roles. Affects how characters interact.",
+  worldGeography: "Where the story takes place physically. One sentence is fine. Specific landmarks beat abstract descriptions.",
+  worldMagicKind: "Picks genre conventions for power systems. Cultivation: realms/breakthroughs. LitRPG: stats/levels. Classical magic: schools/spells. None: no power system.",
+  worldMagicDesc: "How the system works in 2-3 sentences. Costs, drawbacks, who can use it. The 'progression path' field below makes this concrete.",
+  worldProgression: "Ordered tiers readers can track. Required for progression genres. Example: 'Body Tempering → Qi Condensation → Foundation Building → Core Formation → Nascent Soul'. One per line.",
+  worldBannedAnach: "Specific concepts the writer must NEVER reference ('smartphone' in a medieval setting, 'antibiotics' in 1890s frontier). The deterministic strip + critics enforce these.",
+  worldVibes: "Concrete sensory anchors: 'coal smoke', 'frozen pump handles', 'lantern-lit alleys', 'incense haze'. The Scene Writer leans on these for atmosphere. The more specific, the better.",
+
+  // --- Arc preferences ---
+  arcCliff: "Web-novel cliffhanger discipline. Low: soft chapter endings. Medium: most chapters end on a hook. High: every chapter ends on a hard pull (typical for daily-update serials).",
+  arcPacing: "Slow_burn: more interiority + setup, milestones spaced wide. Balanced: web-novel norm. Breakneck: tight scenes, milestones land fast, less time spent dwelling.",
+  arcRomance: "None: no romance subplot. Subtext: hints + tension only. Warm: explicit but not graphic. Spicy: on-page intimacy.",
+  arcAction: "Light: dialogue + interiority drive scenes. Balanced: action when it matters. Heavy: action sets every major beat.",
+  arcInclude: "Tropes the engine MUST hit (one per line). Examples: 'the long winter', 'deathbed promise', 'rival becomes ally', 'tournament arc'.",
+  arcAvoid: "Tropes the engine must NEVER use. Examples: 'love triangle', 'amnesia', 'fridged girlfriend', 'mary sue'.",
+  arcMile: "Visible wins to deliver, in chapter order. Power tiers, status ranks, romance steps, territory claims. One per line. The Chapter Planner makes sure these land on-page when their target chapter arrives.",
+  arcEmo: "What you want the reader to feel by the end. One sentence. Used as the catharsis-act target vector. Example: 'From quiet dread to earned warmth.'",
+
+  // --- Style anchors ---
+  styleAuth: "Authors whose VIBE you want — used as flavor for the prompts, not for copying. 'Annie Proulx', 'Brandon Sanderson', 'Reki Kawahara'.",
+  styleBooks: "Books that influence the feel of this story.",
+  stylePassages: "Sample passages (yours or from books you like, public-domain only please). The strongest style anchor in the system. Separate with a blank line.",
+
+  // --- Paste ---
+  pasteText: "Anything: handwritten notes, a sample chapter, a worldbook, character spreadsheets. At least 20 characters. The parser extracts structured fields you can review and edit.",
+  pasteHint: "Tell the parser what kind of text this is so it weights the parse correctly. Examples: 'character bible', 'world rules', 'draft chapter', 'plot outline'.",
+
+  // --- Profile ---
+  profileName: "How this profile appears in the dropdown when creating a story. Often your name or pen name.",
+  profileBio: "Free-form bio. The Profiler uses this to infer voice when there are no writing samples. Specific habits ('writes short sentences', 'never names emotions') beat abstract descriptions.",
+  profileBg: "Your professional / life background. Influences narrative register and what subjects feel native to the voice.",
+  profilePers: "Your personality. Affects emotional defaults — humor type, vulnerability handling, interiority density.",
+  profileComm: "How you communicate generally. Concise, layered, deflective, theatrical, etc.",
+  profileQuirks: "Specific verbal/written habits. 'Never names emotions outright', 'compares people to weather', 'never uses semicolons'.",
+  profileInt: "What you care about. Influences thematic emphasis when this voice writes.",
+  profileSamples: "Your actual writing. 2-4 short passages, separated by blank lines. This is the highest-leverage field — the Profiler derives lexical statistics directly from these.",
+  profileTags: "Genres / topics this voice does well. Comma-separated. Used for matching profiles to stories.",
+
+  // --- Outputs ---
+  status_pending: "Story envelope + bibles persisted. Generation has not started yet. Click 'Start writing' when you're ready.",
+  status_architecting: "Building the 4-act macro arc plan (acts, milestones, plot seeds, subplots).",
+  status_planning: "Planning the current chapter into Kishōtenketsu scene beats (introduction → development → twist → conclusion).",
+  status_writing: "Scenes drafting now. Each scene goes through: Writer → 5 critics in parallel → Editor → deterministic humaniser → commit.",
+  status_running: "Pipeline active.",
+  status_awaiting_continue: "Initial batch finished but more chapters remain. Click 'Continue' to write the next batch.",
+  status_completed: "All chapters written. Conclusion section now visible.",
+  status_failed: "Generation crashed. Check the Live events tab for the error. Use 'Edit bibles' to fix the inputs and try again.",
+
+  tier_main: "Main character: POV-eligible, full voice fingerprint + mood vectors tracked every scene.",
+  tier_recurring: "Recurring character: appears in 3+ chapters, voice fingerprint + mood tracking when they're on-page.",
+  tier_side: "Side character: 1-2 appearances. Lightweight stub. No mood tracking.",
+
+  sev_info: "Informational note from a critic. No rewrite triggered.",
+  sev_warn: "Drift from target. The Editor will try to address this on the next critic cycle (max 2 cycles per scene).",
+  sev_error: "Hard miss. Triggers an Editor rewrite if cycle budget remains.",
+
+  wordCount: "Final word count after the deterministic humanisation pass.",
+  cycleCount: "How many draft → critic → editor cycles ran for this scene (capped at 2).",
+  humanisation: "Deterministic post-pass report: em-dashes stripped, banned phrases replaced, contractions injected, sentences split for burstiness, fragments detected, etc.",
+  burstiness: "Sentence-length variance. Higher = more varied = more human-feeling. AI-written prose tends to cluster around the mean.",
+  emDashes: "Em-dashes (—) are the #1 AI tell. Every one found is auto-replaced with a period+capital or comma.",
+  contractions: "Don't, can't, I'd, gotta. Formal AI tends to under-contract in dialogue. We boost the rate inside quotes only.",
+  bannedPhrases: "Strikes against the AI-tell blocklist (delve, tapestry, unwavering, in conclusion, myriad, bustling, gleaming...).",
+
+  progress_percent: "Estimated completion across the current batch. Architect = 5%, each chapter ~85/N%, finalisation = 10%.",
+  arc_act: "One of four web-novel acts. Discovery: establish character + stakes. Escalation: raise tension + first wins. Revelation: the twist. Catharsis: payoffs land.",
+  arc_milestone: "Visible win the reader can point to. Power tier, status rank, romance step, etc.",
+  arc_seed: "Planted mystery / setup beat. Status: planted → developing → paying_off → resolved.",
+  scene_kisho: "Kishōtenketsu phase: introduction → development → twist → conclusion. Each chapter follows this 4-beat arc.",
+  scene_gcd: "Goal / Conflict / Disaster (Dwight Swain). Every scene has all three. Every scene ends WORSE, COMPLICATED, or ESCALATED — never neatly resolved.",
+  scene_emotion: "Plutchik 8-axis vectors. The Chapter Planner sets start + end targets for both the protagonist AND the reader; the Emotion critic scores delivery vs target.",
+  scene_sensory: "Which senses the scene MUST anchor in. The Show-Don't-Tell critic flags scenes with abstract emotion descriptions instead of concrete sensory detail.",
+  scene_techniques: "Craft techniques to apply. Maps directly to the bundled corpus exemplars — the Scene Writer retrieves matching passages as few-shot anchors.",
+
+  voice_fingerprint: "Lexical + stylistic profile a character or author should follow. Includes sentence-length stats, contraction rate, formality, register, banned phrases, sample lines.",
+  mood_history: "Per-character Plutchik vector evolution across scenes. Updated by Continuity v2 after every scene commits.",
+  continuity_ledger: "Story-level state: open plot threads, unresolved cliffhangers, world state changes, plot seed events.",
+};
+
+function tip(key) {
+  const text = TOOLTIPS[key];
+  if (!text) return '';
+  return ` <span class="tip-icon" data-tip="${esc(text)}">?</span>`;
+}
+function tipAttr(key) {
+  const text = TOOLTIPS[key];
+  if (!text) return '';
+  return `data-tip="${esc(text)}"`;
+}
+const PROGRESSION_GENRES = [
+  { v: 'progression_fantasy', label: 'Progression fantasy' },
+  { v: 'cultivation', label: 'Cultivation / Wuxia' },
+  { v: 'litrpg', label: 'LitRPG' },
+  { v: 'isekai', label: 'Isekai' },
+  { v: 'light_novel', label: 'Light novel' },
+  { v: 'romance', label: 'Romance' },
+  { v: 'literary', label: 'Literary' },
+  { v: 'slice_of_life', label: 'Slice of life' },
+  { v: 'urban_fantasy', label: 'Urban fantasy' },
+  { v: 'sci_fi', label: 'Sci-fi' },
+];
+const TONE_CHIPS = ['gritty', 'hopeful', 'dry_funny', 'tragic', 'cathartic', 'wholesome', 'dark', 'whimsical', 'bittersweet'];
+
+function chipGroup(name, values, selected, multi = true) {
+  return values.map(v => {
+    const val = typeof v === 'string' ? v : v.v;
+    const label = typeof v === 'string' ? v.replace(/_/g, ' ') : v.label;
+    const active = selected.includes(val);
+    return `<span class="chip ${active ? 'active' : ''}" data-chip-group="${name}" data-chip-val="${val}" data-multi="${multi}">${esc(label)}</span>`;
+  }).join('');
+}
+
+function wireChips(rootEl, state) {
+  rootEl.querySelectorAll('[data-chip-group]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const group = chip.dataset.chipGroup;
+      const val = chip.dataset.chipVal;
+      const multi = chip.dataset.multi === 'true';
+      if (!Array.isArray(state[group])) state[group] = [];
+      if (multi) {
+        const idx = state[group].indexOf(val);
+        if (idx >= 0) state[group].splice(idx, 1); else state[group].push(val);
+        chip.classList.toggle('active');
+      } else {
+        state[group] = [val];
+        rootEl.querySelectorAll(`[data-chip-group="${group}"]`).forEach(c => c.classList.toggle('active', c.dataset.chipVal === val));
+      }
+    });
+  });
+}
+
+/* ============================================================
+ * Router
+ * ============================================================ */
+
+const ROUTES = [
+  { path: /^#?\/?$/, handler: showStoriesList },
+  { path: /^#\/stories\/?$/, handler: showStoriesList },
+  { path: /^#\/stories\/new\/?$/, handler: showStoryPicker },
+  { path: /^#\/stories\/new\/quick\/?$/, handler: showQuickWizard },
+  { path: /^#\/stories\/new\/deep\/?$/, handler: showDeepWizard },
+  { path: /^#\/stories\/new\/paste\/?$/, handler: showPasteWizard },
+  { path: /^#\/stories\/([^/]+)\/bibles\/?$/, handler: (m) => showBibleReview(m[1]) },
+  { path: /^#\/stories\/([^/]+)\/?$/, handler: (m) => showStoryDetail(m[1]) },
+  { path: /^#\/stories\/([^/]+)\/skeleton\/?$/, handler: (m) => showSkeleton(m[1]) },
+  { path: /^#\/profiles\/?$/, handler: showProfilesList },
+  { path: /^#\/profiles\/new\/?$/, handler: showProfileNew },
+  { path: /^#\/profiles\/([^/]+)\/?$/, handler: (m) => showProfileDetail(m[1]) },
+];
+
+function route() {
+  const hash = window.location.hash || '#/stories';
+  for (const r of ROUTES) {
+    const m = hash.match(r.path);
+    if (m) { r.handler(m); return; }
+  }
+  app.innerHTML = `<div class="card">Unknown route: ${esc(hash)}</div>`;
+}
+
+window.addEventListener('hashchange', route);
+
+/* ============================================================
+ * Screens
+ * ============================================================ */
+
+// ---- Stories list ------------------------------------------
+async function showStoriesList() {
+  setActiveNav('stories');
+  app.innerHTML = `<h2>Your stories</h2><div id="list" class="stack"></div>`;
+  const list = document.getElementById('list');
+  list.innerHTML = '<div class="muted">Loading...</div>';
+  try {
+    const data = await api('GET', '/stories/');
+    const stories = data.stories || [];
+    if (!stories.length) {
+      list.innerHTML = `<div class="card"><div class="muted">No stories yet.</div><br/><a class="btn primary" href="#/stories/new">Create your first story</a></div>`;
+      return;
+    }
+    list.innerHTML = stories.map(s => `
+      <a class="card clickable" href="#/stories/${esc(s.story_id)}">
+        <div class="row">
+          <h3 style="margin:0;flex:1">${esc(s.title || '(untitled)')}</h3>
+          <span class="badge ${s.status}">${STATUS_LABELS[s.status] || s.status}</span>
+        </div>
+        <div class="muted" style="margin-top:6px">Chapter ${s.current_chapter_idx || 0} of ${s.total_chapters || '?'} · ${fmtDate(s.updated_at)}</div>
+        <div class="progress"><div class="progress-bar" style="width:${(s.progress?.percent || 0)}%"></div></div>
+      </a>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="card">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+// ---- Story picker ------------------------------------------
+function showStoryPicker() {
+  setActiveNav('stories');
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · New</div>
+    <h2>How do you want to start?</h2>
+    <div class="grid grid-3">
+      <a class="card clickable pick-card" href="#/stories/new/quick">
+        <div class="pick-tag">~ 5 minutes</div>
+        <h3>Quick wizard</h3>
+        <div class="muted">5 fields. We invent the rest. Best for trying out the engine or when you just want to see something.</div>
+      </a>
+      <a class="card clickable pick-card" href="#/stories/new/deep">
+        <div class="pick-tag">~ 20 minutes</div>
+        <h3>Deep wizard</h3>
+        <div class="muted">Full character bibles, world bible, arc preferences. Best for serious projects where voice matters.</div>
+      </a>
+      <a class="card clickable pick-card" href="#/stories/new/paste">
+        <div class="pick-tag">~ 2 minutes</div>
+        <h3>Paste anything</h3>
+        <div class="muted">Drop in notes, a draft chapter, a worldbook. We extract structure and pre-fill the Deep wizard.</div>
+      </a>
+    </div>
+  `;
+}
+
+// ---- Quick wizard ------------------------------------------
+function showQuickWizard() {
+  setActiveNav('stories');
+  const state = {
+    title: '', premise: '', num_chapters: 10, initial_chapters: 3,
+    genres: [], tone: [], characters: [],
+    pov: 'third_limited', tense: 'past', target_chapter_words: 2200, profile_id: '',
+  };
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · <a href="#/stories/new">New</a> · Quick</div>
+    <h2>Quick wizard</h2>
+    <div class="card">
+      <div class="field">
+        <label>Title *${tip('title')}</label>
+        <input id="f-title" placeholder="The Long Winter" />
+      </div>
+      <div class="field">
+        <label>Premise *${tip('premise')}</label>
+        <textarea id="f-premise" class="tall" placeholder="A frontier doctor faces an impossible blizzard with one nurse, no antibiotics, and a sheriff who is hiding a smallpox case in the saloon. Two children dead by chapter three. The town's only road out is buried for the season. She has to decide who lives."></textarea>
+        <div class="hint">2-4 sentences. Concrete characters and stakes beat abstract setups. The richer the premise, the better the arc plan.</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Number of chapters${tip('numChapters')}</label>
+          <input id="f-num" type="number" min="1" max="200" value="10" />
+        </div>
+        <div class="field">
+          <label>Initial batch (write now)${tip('initialBatch')}</label>
+          <input id="f-init" type="number" min="1" max="50" value="3" />
+        </div>
+        <div class="field">
+          <label>Target words / chapter${tip('targetWords')}</label>
+          <input id="f-words" type="number" min="600" max="8000" value="2200" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>POV${tip('pov')}</label>
+          <select id="f-pov">
+            <option value="third_limited">Third limited</option>
+            <option value="first">First person</option>
+            <option value="third_omniscient">Third omniscient</option>
+            <option value="multi">Multi-POV</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tense${tip('tense')}</label>
+          <select id="f-tense">
+            <option value="past">Past</option>
+            <option value="present">Present</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Author profile (optional)${tip('profileId')}</label>
+          <select id="f-profile"><option value="">— none —</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Genres (pick any)${tip('genres')}</label>
+        <div id="genre-chips">${chipGroup('genres', PROGRESSION_GENRES, [])}</div>
+      </div>
+      <div class="field">
+        <label>Tone (pick any)${tip('tone')}</label>
+        <div id="tone-chips">${chipGroup('tone', TONE_CHIPS, [])}</div>
+      </div>
+      <div class="field">
+        <label>Characters (up to 8)${tip('charSampleLine')}</label>
+        <div id="char-list" class="stack"></div>
+        <button id="add-char" type="button" style="margin-top:8px">+ Add character</button>
+      </div>
+      <div class="row" style="margin-top:18px">
+        <button id="submit" class="primary">Create story</button>
+      </div>
+    </div>
+  `;
+  wireChips(app, state);
+  const charList = document.getElementById('char-list');
+  function redrawChars() {
+    charList.innerHTML = state.characters.map((c, i) => `
+      <div class="card" style="padding:14px">
+        <div class="field-row">
+          <div class="field" style="margin:0"><label>Name${tip('charName')}</label><input data-ch="${i}" data-k="name" placeholder="Mara Holt" value="${esc(c.name)}" /></div>
+          <div class="field" style="margin:0"><label>Role${tip('charRole')}</label><input data-ch="${i}" data-k="role" placeholder="protagonist, mentor..." value="${esc(c.role)}" /></div>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field" style="margin:0"><label>One vivid trait${tip('charTrait')}</label><input data-ch="${i}" data-k="trait" placeholder="stubborn frontier doctor" value="${esc(c.trait)}" /></div>
+          <div class="field" style="margin:0"><label>Sample line${tip('charSampleLine')}</label><input data-ch="${i}" data-k="sample_line" placeholder='"I&apos;d say you&apos;ve got about an hour."' value="${esc(c.sample_line || '')}" /></div>
+        </div>
+        <button data-rm="${i}" style="margin-top:10px">Remove</button>
+      </div>
+    `).join('');
+    charList.querySelectorAll('input[data-ch]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        state.characters[+inp.dataset.ch][inp.dataset.k] = inp.value;
+      });
+    });
+    charList.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.addEventListener('click', () => { state.characters.splice(+btn.dataset.rm, 1); redrawChars(); });
+    });
+  }
+  document.getElementById('add-char').addEventListener('click', () => {
+    if (state.characters.length >= 8) return toast('Max 8 quick characters. Use Deep wizard for more.', 'error');
+    state.characters.push({ name: '', role: 'protagonist', trait: '', sample_line: '' });
+    redrawChars();
+  });
+  redrawChars();
+
+  api('GET', '/profiles/').then(d => {
+    const sel = document.getElementById('f-profile');
+    (d.profiles || []).forEach(p => {
+      const o = document.createElement('option'); o.value = p.mongo_id || p.profile_id; o.textContent = p.name;
+      sel.appendChild(o);
+    });
+  }).catch(() => {});
+
+  document.getElementById('submit').addEventListener('click', async () => {
+    state.title = document.getElementById('f-title').value.trim();
+    state.premise = document.getElementById('f-premise').value.trim();
+    state.num_chapters = +document.getElementById('f-num').value;
+    state.initial_chapters = +document.getElementById('f-init').value;
+    state.target_chapter_words = +document.getElementById('f-words').value;
+    state.pov = document.getElementById('f-pov').value;
+    state.tense = document.getElementById('f-tense').value;
+    state.profile_id = document.getElementById('f-profile').value || null;
+    if (!state.title) return toast('Title is required.', 'error');
+    if (!state.premise || state.premise.length < 10) return toast('Premise must be at least 10 characters.', 'error');
+    state.characters = state.characters.filter(c => c.name && c.name.trim());
+    try {
+      toast('Building world + cast...');
+      const r = await api('POST', '/stories/quick/', state);
+      window.location.hash = `#/stories/${r.story_id}/bibles`;
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+// ---- Deep wizard -------------------------------------------
+function showDeepWizard() {
+  setActiveNav('stories');
+  const state = {
+    quick: {
+      title: '', premise: '', num_chapters: 12, initial_chapters: 3,
+      genres: [], tone: [], characters: [],
+      pov: 'third_limited', tense: 'past', target_chapter_words: 2200, profile_id: null,
+    },
+    characters: [],
+    world: {
+      setting: '', time_period: '', technology_level: '', social_structure: '',
+      geography: '', languages: [], factions: [],
+      magic_or_system: { kind: 'none', description: '', progression_path: [], cost_or_drawback: '', hard_limits: [] },
+      rules: [], banned_anachronisms: [], must_have_vibes: [], notes: '',
+    },
+    arc_preferences: {
+      must_include_tropes: [], must_avoid_tropes: [],
+      progression_milestones: [], plot_seeds_to_plant: [],
+      reader_emotional_journey: '',
+      cliffhanger_intensity: 'high', pacing_speed: 'balanced',
+      romance_temperature: 'subtext', action_density: 'balanced',
+    },
+    style_anchors: { reference_authors: [], reference_books: [], pasted_sample_passages: [] },
+  };
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · <a href="#/stories/new">New</a> · Deep</div>
+    <h2>Deep wizard</h2>
+    <div class="muted" style="margin-bottom:18px">Every field is optional except title, premise, and number of chapters. Anything left blank gets generated by Character Forge / World Builder while respecting what you did fill in.</div>
+
+    <div class="card">
+      <h3>Basics</h3>
+      <div class="field"><label>Title *${tip('title')}</label><input id="d-title" /></div>
+      <div class="field">
+        <label>Premise *${tip('premise')}</label>
+        <textarea id="d-premise" class="tall" placeholder="A frontier doctor faces an impossible blizzard with one nurse, no antibiotics, and a sheriff who is hiding a smallpox case in the saloon. Two children dead by chapter three. The town's only road out is buried for the season."></textarea>
+        <div class="hint">2-4 sentences. Concrete characters and stakes beat abstract setups.</div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Chapters *${tip('numChapters')}</label><input id="d-num" type="number" min="1" max="200" value="12" /></div>
+        <div class="field"><label>Initial batch${tip('initialBatch')}</label><input id="d-init" type="number" min="1" value="3" /></div>
+        <div class="field"><label>Target words / chapter${tip('targetWords')}</label><input id="d-words" type="number" value="2200" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>POV${tip('pov')}</label><select id="d-pov"><option value="third_limited">Third limited</option><option value="first">First</option><option value="third_omniscient">Third omniscient</option><option value="multi">Multi-POV</option></select></div>
+        <div class="field"><label>Tense${tip('tense')}</label><select id="d-tense"><option value="past">Past</option><option value="present">Present</option></select></div>
+        <div class="field"><label>Profile${tip('profileId')}</label><select id="d-profile"><option value="">— none —</option></select></div>
+      </div>
+      <div class="field"><label>Genres${tip('genres')}</label><div id="d-genres">${chipGroup('genres', PROGRESSION_GENRES, [])}</div></div>
+      <div class="field"><label>Tone${tip('tone')}</label><div id="d-tones">${chipGroup('tone', TONE_CHIPS, [])}</div></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Characters</h3>
+      <div class="muted" style="margin-bottom:10px">Add as many as you want. Tier determines how richly we track them. Leave fields blank to let Character Forge fill them in.</div>
+      <div id="d-chars" class="stack"></div>
+      <button id="d-add-char" style="margin-top:8px">+ Add character</button>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>World</h3>
+      <div class="field-row">
+        <div class="field"><label>Setting (one paragraph)${tip('worldSetting')}</label><textarea id="w-setting" class="tall" placeholder="An alpine frontier town in 1894, eight thousand feet up, snowed in three months a year. Silver mine just shut down. Population two hundred and falling. Rail line buried since November. A doctor, a sheriff, a saloon owner, and a Methodist preacher all share one telegraph operator who is fifteen years old."></textarea></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Time period${tip('worldTimePeriod')}</label><input id="w-time" /></div>
+        <div class="field"><label>Technology level${tip('worldTech')}</label><input id="w-tech" /></div>
+        <div class="field"><label>Social structure${tip('worldSocial')}</label><input id="w-social" /></div>
+        <div class="field"><label>Geography${tip('worldGeography')}</label><input id="w-geo" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Magic / system kind${tip('worldMagicKind')}</label><select id="w-magic-kind"><option value="none">None</option><option value="cultivation">Cultivation</option><option value="litrpg">LitRPG</option><option value="classical_magic">Classical magic</option><option value="psionics">Psionics</option><option value="tech">Tech</option><option value="other">Other</option></select></div>
+        <div class="field"><label>Magic description${tip('worldMagicDesc')}</label><textarea id="w-magic-desc" placeholder="Cultivators draw qi from breath, anchored to one of the five elements. Each realm has a clear physical breakthrough. Tribulation lightning at every major step. Without a sect's resources, a self-cultivator caps at Foundation Building."></textarea></div>
+      </div>
+      <div class="field"><label>Progression path${tip('worldProgression')}</label><textarea id="w-prog" class="tall" placeholder="Body Tempering&#10;Qi Condensation&#10;Foundation Building&#10;Core Formation&#10;Nascent Soul&#10;Soul Transformation&#10;Mahayana"></textarea></div>
+      <div class="field"><label>Banned anachronisms${tip('worldBannedAnach')}</label><textarea id="w-anach" placeholder="smartphone&#10;automobile&#10;antibiotics&#10;passport&#10;therapist&#10;weekend"></textarea></div>
+      <div class="field"><label>Must-have vibes${tip('worldVibes')}</label><textarea id="w-vibes" placeholder="lantern-lit alleys&#10;coal smoke&#10;frozen pump handles&#10;incense haze on temple steps&#10;salt wind off the docks&#10;the click of an unlit oil lamp cooling"></textarea></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Arc preferences</h3>
+      <div class="field-row">
+        <div class="field"><label>Cliffhanger intensity${tip('arcCliff')}</label><select id="a-cliff"><option>low</option><option selected>medium</option><option>high</option></select></div>
+        <div class="field"><label>Pacing speed${tip('arcPacing')}</label><select id="a-pacing"><option>slow_burn</option><option selected>balanced</option><option>breakneck</option></select></div>
+        <div class="field"><label>Romance temperature${tip('arcRomance')}</label><select id="a-rom"><option>none</option><option selected>subtext</option><option>warm</option><option>spicy</option></select></div>
+        <div class="field"><label>Action density${tip('arcAction')}</label><select id="a-action"><option>light</option><option selected>balanced</option><option>heavy</option></select></div>
+      </div>
+      <div class="field"><label>Must-include tropes${tip('arcInclude')}</label><textarea id="a-incl" placeholder="the long winter&#10;deathbed promise&#10;rival becomes ally&#10;a found family&#10;a single act of mercy that costs everything"></textarea></div>
+      <div class="field"><label>Must-avoid tropes${tip('arcAvoid')}</label><textarea id="a-avoid" placeholder="love triangle&#10;amnesia&#10;fridged girlfriend&#10;chosen one prophecy&#10;'and it was all a dream'"></textarea></div>
+      <div class="field"><label>Progression milestones${tip('arcMile')}</label><textarea id="a-mile" class="tall" placeholder="MC breaks through Body Tempering in chapter 3&#10;MC defeats the rival sect heir in a public duel by chapter 7&#10;MC inherits the master's sword in chapter 10&#10;MC opens her first inner gate in chapter 14&#10;MC kills the sect elder who betrayed her father in chapter 19"></textarea></div>
+      <div class="field"><label>Reader emotional journey${tip('arcEmo')}</label><textarea id="a-emo" placeholder="From quiet dread in the first act to earned warmth by the close, with a hard turn into rage at the midpoint that the catharsis must redeem."></textarea></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Style anchors (optional)</h3>
+      <div class="field"><label>Reference authors${tip('styleAuth')}</label><textarea id="s-auth" placeholder="Annie Proulx&#10;Cormac McCarthy&#10;Reki Kawahara"></textarea></div>
+      <div class="field"><label>Reference books${tip('styleBooks')}</label><textarea id="s-books" placeholder="Close Range&#10;Blood Meridian&#10;Cradle"></textarea></div>
+      <div class="field"><label>Pasted sample passages${tip('stylePassages')}</label><textarea id="s-passages" class="xtall" placeholder="Paste 2-5 passages from your own writing or from public-domain text whose VIBE matches what you want. Separate each passage with a blank line.&#10;&#10;Example:&#10;&#10;She found the room by smell first. Cold metal. Something older underneath. Like rust soaked through paper and left to dry on a windowsill. The door was not locked. It had been, once, and someone had peeled the lock out with a small tool.&#10;&#10;He sat cross-legged on the stone and breathed. The mountain breathed back, slow and indifferent. Beneath the courtyard, beneath the foundation, beneath the roots of the old plum tree, something turned. He could not have said what."></textarea></div>
+    </div>
+
+    <div class="row" style="margin-top:18px">
+      <button id="d-submit" class="primary">Create story</button>
+    </div>
+  `;
+  wireChips(app, state.quick);
+
+  // Render characters
+  const charList = document.getElementById('d-chars');
+  function drawChars() {
+    charList.innerHTML = state.characters.map((c, i) => `
+      <div class="card" style="padding:18px">
+        <div class="field-row">
+          <div class="field" style="margin:0"><label>Name *${tip('charName')}</label><input data-i="${i}" data-k="name" placeholder="Mara Holt" value="${esc(c.name)}" /></div>
+          <div class="field" style="margin:0"><label>Tier${tip('charTier')}</label><select data-i="${i}" data-k="tier">
+            <option value="main" ${c.tier === 'main' ? 'selected' : ''}>Main (POV-eligible)</option>
+            <option value="recurring" ${c.tier === 'recurring' ? 'selected' : ''}>Recurring</option>
+            <option value="side" ${c.tier === 'side' ? 'selected' : ''}>Side</option>
+          </select></div>
+          <div class="field" style="margin:0"><label>Role${tip('charRole')}</label><input data-i="${i}" data-k="role" placeholder="protagonist, mentor..." value="${esc(c.role || '')}" /></div>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field" style="margin:0"><label>Age${tip('charAge')}</label><input data-i="${i}" data-k="age" placeholder="17, mid-thirties..." value="${esc(c.age || '')}" /></div>
+          <div class="field" style="margin:0"><label>Pronouns${tip('charPronouns')}</label><input data-i="${i}" data-k="pronouns" placeholder="she/her, he/him, they/them" value="${esc(c.pronouns || '')}" /></div>
+        </div>
+        <div class="field" style="margin-top:8px"><label>Background${tip('charBackground')}</label><textarea data-i="${i}" data-k="background" placeholder="Trained in Boston, returned home after her father died of silicosis at the mine. Has not slept properly in three weeks. Carries a 1882 Webley revolver she has never fired.">${esc(c.background || '')}</textarea></div>
+        <div class="field"><label>Motivations (one per line)${tip('charMotivations')}</label><textarea data-i="${i}" data-k="motivations_text" placeholder="Keep everyone alive through winter&#10;Find out who poisoned the well&#10;Hold the town together until thaw">${(c.motivations || []).join('\n')}</textarea></div>
+        <div class="field"><label>Fears (one per line)${tip('charFears')}</label><textarea data-i="${i}" data-k="fears_text" placeholder="Losing another patient she could have saved&#10;Becoming her mother&#10;Being seen crying">${(c.fears || []).join('\n')}</textarea></div>
+        <div class="field"><label>Arc${tip('charArc')}</label><textarea data-i="${i}" data-k="arc" placeholder="Learns to ask for help. By chapter 15 she lets Sam carry the kit. By chapter 22 she tells Father Brennan the truth about the well.">${esc(c.arc || '')}</textarea></div>
+        <div class="field"><label>Speech traits${tip('charSpeechTraits')}</label><input data-i="${i}" data-k="speech_traits" placeholder="short sentences, dry humour, never names emotions, says 'I'd say' before any judgement" value="${esc(c.speech_traits || '')}" /></div>
+        <div class="field"><label>Sample lines${tip('charSampleLines')}</label><textarea data-i="${i}" data-k="sample_lines_text" class="tall" placeholder="I'd say you've got about an hour.&#10;Look. Sit down. Drink that.&#10;That is not what I said and you know it.&#10;He's lying. I've watched him lie since we were twelve.&#10;Don't.&#10;If you came here to apologise, you're wasting both our time.">${(c.sample_lines || []).join('\n')}</textarea></div>
+        <div class="field"><label>Banned phrases${tip('charBannedPhrases')}</label><textarea data-i="${i}" data-k="banned_text" placeholder="delve&#10;unwavering&#10;I shall&#10;perhaps">${(c.banned_phrases || []).join('\n')}</textarea></div>
+        <button data-rm="${i}">Remove</button>
+      </div>
+    `).join('');
+    charList.querySelectorAll('[data-i]').forEach(el => {
+      el.addEventListener('input', () => {
+        const i = +el.dataset.i; const k = el.dataset.k;
+        if (k.endsWith('_text')) {
+          const target = k.replace('_text', '');
+          state.characters[i][target === 'banned' ? 'banned_phrases' : target === 'sample_lines' ? 'sample_lines' : target] = el.value.split('\n').map(s => s.trim()).filter(Boolean);
+        } else {
+          state.characters[i][k] = el.value;
+        }
+      });
+    });
+    charList.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { state.characters.splice(+b.dataset.rm, 1); drawChars(); }));
+  }
+  document.getElementById('d-add-char').addEventListener('click', () => {
+    state.characters.push({ name: '', tier: state.characters.length === 0 ? 'main' : 'recurring', role: '', background: '', motivations: [], fears: [], secrets: [], arc: '', knowledge_sources: [], relationships: [], speech_traits: '', preferred_phrases: [], banned_phrases: [], sample_lines: [] });
+    drawChars();
+  });
+  drawChars();
+
+  api('GET', '/profiles/').then(d => {
+    const sel = document.getElementById('d-profile');
+    (d.profiles || []).forEach(p => {
+      const o = document.createElement('option'); o.value = p.mongo_id || p.profile_id; o.textContent = p.name;
+      sel.appendChild(o);
+    });
+  }).catch(() => {});
+
+  document.getElementById('d-submit').addEventListener('click', async () => {
+    state.quick.title = document.getElementById('d-title').value.trim();
+    state.quick.premise = document.getElementById('d-premise').value.trim();
+    state.quick.num_chapters = +document.getElementById('d-num').value;
+    state.quick.initial_chapters = +document.getElementById('d-init').value;
+    state.quick.target_chapter_words = +document.getElementById('d-words').value;
+    state.quick.pov = document.getElementById('d-pov').value;
+    state.quick.tense = document.getElementById('d-tense').value;
+    state.quick.profile_id = document.getElementById('d-profile').value || null;
+    state.quick.characters = []; // Deep uses its own characters list
+
+    state.world.setting = document.getElementById('w-setting').value.trim();
+    state.world.time_period = document.getElementById('w-time').value.trim();
+    state.world.technology_level = document.getElementById('w-tech').value.trim();
+    state.world.social_structure = document.getElementById('w-social').value.trim();
+    state.world.geography = document.getElementById('w-geo').value.trim();
+    state.world.magic_or_system.kind = document.getElementById('w-magic-kind').value;
+    state.world.magic_or_system.description = document.getElementById('w-magic-desc').value.trim();
+    state.world.magic_or_system.progression_path = document.getElementById('w-prog').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.world.banned_anachronisms = document.getElementById('w-anach').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.world.must_have_vibes = document.getElementById('w-vibes').value.split('\n').map(s => s.trim()).filter(Boolean);
+
+    state.arc_preferences.cliffhanger_intensity = document.getElementById('a-cliff').value;
+    state.arc_preferences.pacing_speed = document.getElementById('a-pacing').value;
+    state.arc_preferences.romance_temperature = document.getElementById('a-rom').value;
+    state.arc_preferences.action_density = document.getElementById('a-action').value;
+    state.arc_preferences.must_include_tropes = document.getElementById('a-incl').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.arc_preferences.must_avoid_tropes = document.getElementById('a-avoid').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.arc_preferences.progression_milestones = document.getElementById('a-mile').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.arc_preferences.reader_emotional_journey = document.getElementById('a-emo').value.trim();
+
+    state.style_anchors.reference_authors = document.getElementById('s-auth').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.style_anchors.reference_books = document.getElementById('s-books').value.split('\n').map(s => s.trim()).filter(Boolean);
+    state.style_anchors.pasted_sample_passages = document.getElementById('s-passages').value.split('\n\n').map(s => s.trim()).filter(Boolean);
+
+    if (!state.quick.title) return toast('Title is required.', 'error');
+    if (!state.quick.premise || state.quick.premise.length < 10) return toast('Premise must be at least 10 characters.', 'error');
+
+    try {
+      toast('Building bibles...');
+      const r = await api('POST', '/stories/deep/', state);
+      window.location.hash = `#/stories/${r.story_id}/bibles`;
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+// ---- Paste wizard ------------------------------------------
+function showPasteWizard() {
+  setActiveNav('stories');
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · <a href="#/stories/new">New</a> · Paste</div>
+    <h2>Paste anything</h2>
+    <div class="card">
+      <div class="field">
+        <label>Your raw text${tip('pasteText')}</label>
+        <textarea id="p-text" class="xtall" style="min-height:380px" placeholder="Mara Holt is a forty-year-old doctor who returned to her frontier hometown after her father died of silicosis. She is stubborn and uses dry humour. The story takes place in 1894-1895 during a record-breaking winter that cuts the town off from the rail line for three months.&#10;&#10;Antagonist: Sheriff Owen Pell, who hides a smallpox case in the saloon because the saloon owner is his cousin. Mara discovers the cover-up in chapter 4.&#10;&#10;Recurring characters: Sam Pell (stableman, the sheriff's brother, secretly Mara's only ally); Father Brennan (Methodist preacher, dying of TB, knows everyone's secrets); Hannah Voss (15, the town's telegraph operator, the only link to the world outside).&#10;&#10;World rules: rail line buried Nov-March. One doctor, one nurse, one mortician (Hannah's father). No antibiotics. No telegraph if the wires go down. The mine is closed but the company still owns the land.&#10;&#10;Tone: gritty, eventually hopeful. Slow burn pacing. Subtext romance with Sam — no on-page intimacy.&#10;&#10;Must include: the long winter, deathbed promise, rival becomes ally.&#10;Must avoid: love triangle, amnesia, supernatural elements."></textarea>
+        <div class="hint">At least 20 characters. The parser uses an LLM to extract structured fields (premise, characters, world rules, arc preferences) and pre-fills the Deep wizard for you to review.</div>
+      </div>
+      <div class="field">
+        <label>Hint (optional)${tip('pasteHint')}</label>
+        <input id="p-hint" placeholder="e.g. 'this is a character bible' or 'sample chapter, third-limited POV'" />
+        <div class="hint">Helps the parser weight what it's looking at. Skip if the text speaks for itself.</div>
+      </div>
+      <div class="row">
+        <button id="p-parse" class="primary">Parse</button>
+      </div>
+    </div>
+    <div id="p-result" style="margin-top:18px"></div>
+  `;
+  document.getElementById('p-parse').addEventListener('click', async () => {
+    const raw = document.getElementById('p-text').value;
+    const hint = document.getElementById('p-hint').value.trim();
+    if (!raw || raw.length < 20) return toast('Need at least 20 characters of text.', 'error');
+    try {
+      toast('Parsing...');
+      const r = await api('POST', '/stories/parse/', { raw_text: raw, hint: hint || undefined });
+      const draft = r.draft || {};
+      const result = document.getElementById('p-result');
+      result.innerHTML = `
+        <div class="card">
+          <h3>Parsed draft</h3>
+          <div class="muted" style="margin-bottom:10px">Review what we extracted. Then either submit as a Deep story directly, or take notes and re-enter via the Deep wizard.</div>
+          ${(draft.notes || []).length ? `<div class="card" style="background:var(--bg-2);margin-bottom:10px"><strong>Parser notes:</strong><ul>${draft.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
+          <pre>${esc(JSON.stringify(draft, null, 2))}</pre>
+          <div class="row" style="margin-top:14px">
+            <button id="p-submit" class="primary">Submit as Deep story</button>
+            <a class="btn" href="#/stories/new/deep">Open Deep wizard to edit first</a>
+          </div>
+        </div>
+      `;
+      document.getElementById('p-submit').addEventListener('click', async () => {
+        try {
+          const payload = {
+            quick: draft.quick || { title: '(pasted draft)', premise: raw.slice(0, 200), num_chapters: 10 },
+            characters: draft.characters || [],
+            world: draft.world || {},
+            arc_preferences: draft.arc_preferences || {},
+            style_anchors: draft.style_anchors || {},
+          };
+          const out = await api('POST', '/stories/deep/', payload);
+          window.location.hash = `#/stories/${out.story_id}/bibles`;
+        } catch (e) { toast(e.message, 'error'); }
+      });
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+// ---- Bible review (between create and start) ---------------
+async function showBibleReview(storyId) {
+  setActiveNav('stories');
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · <a href="#/stories/${esc(storyId)}">Story</a> · Bibles</div>
+    <h2>Review your bibles</h2>
+    <div class="muted" style="margin-bottom:18px">Character Forge + World Builder did their first pass. Edit anything that's off, then click <strong>Start writing</strong>. You can also edit later, but changes after generation starts won't retroactively rewrite finished chapters.</div>
+    <div id="review-actions" class="row" style="margin-bottom:14px"></div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>World bible</h3>
+      <div id="world-block"></div>
+      <button id="edit-world" style="margin-top:10px">Edit world bible</button>
+    </div>
+
+    <div class="card">
+      <h3>Characters</h3>
+      <div id="cast-block" class="stack"></div>
+    </div>
+  `;
+  document.getElementById('review-actions').innerHTML = `
+    <button class="primary" id="start-btn">▶ Start writing</button>
+    <a class="btn" href="#/stories/${esc(storyId)}">View story →</a>
+  `;
+  document.getElementById('start-btn').addEventListener('click', async () => {
+    try {
+      await api('POST', `/stories/${storyId}/start/`, {});
+      toast('Generation queued!', 'ok');
+      window.location.hash = `#/stories/${storyId}`;
+    } catch (e) { toast(e.message, 'error'); }
+  });
+
+  // Load world
+  const worldBlock = document.getElementById('world-block');
+  worldBlock.innerHTML = '<div class="muted">Loading...</div>';
+  try {
+    const world = await api('GET', `/bibles/${storyId}/world/`);
+    worldBlock.innerHTML = `
+      <div class="muted"><strong>Setting:</strong> ${esc(world.setting || '(empty)')}</div>
+      <div class="muted" style="margin-top:6px"><strong>Magic system:</strong> ${esc(world.magic_or_system?.kind || 'none')} — ${esc(world.magic_or_system?.description || '')}</div>
+      <div class="muted" style="margin-top:6px"><strong>Factions:</strong> ${(world.factions || []).map(f => f.name).join(', ') || '—'}</div>
+      <div class="muted" style="margin-top:6px"><strong>Rules:</strong> ${(world.rules || []).length} world rules</div>
+      <div class="muted" style="margin-top:6px"><strong>Banned anachronisms:</strong> ${(world.banned_anachronisms || []).join(', ') || '—'}</div>
+      <div class="muted" style="margin-top:6px"><strong>Must-have vibes:</strong> ${(world.must_have_vibes || []).join(', ') || '—'}</div>
+    `;
+  } catch (e) {
+    worldBlock.innerHTML = `<div class="muted">Failed to load: ${esc(e.message)}</div>`;
+  }
+  document.getElementById('edit-world').addEventListener('click', () => editWorldModal(storyId));
+
+  // Load cast
+  const castBlock = document.getElementById('cast-block');
+  castBlock.innerHTML = '<div class="muted">Loading...</div>';
+  try {
+    const data = await api('GET', `/bibles/${storyId}/characters/`);
+    const cast = data.characters || [];
+    if (!cast.length) {
+      castBlock.innerHTML = '<div class="muted">No characters yet.</div>';
+      return;
+    }
+    castBlock.innerHTML = cast.map(c => `
+      <div class="card" style="background:var(--bg-2);display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1">
+          <div class="row">
+            <span class="badge ${c.tier}">${c.tier}</span>
+            <strong>${esc(c.name)}</strong>
+            <span class="muted">${esc(c.role || '')}</span>
+          </div>
+          <div class="muted" style="margin-top:6px">${esc(c.short_description || c.portrait_blurb || '')}</div>
+          ${c.voice_fingerprint?.sample_lines?.length ? `<div style="margin-top:6px;font-style:italic" class="muted">"${esc(c.voice_fingerprint.sample_lines[0])}"</div>` : ''}
+        </div>
+        <button data-edit="${esc(c.character_id)}">Edit</button>
+      </div>
+    `).join('');
+    castBlock.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editCharacterModal(storyId, b.dataset.edit)));
+  } catch (e) {
+    castBlock.innerHTML = `<div class="muted">Failed to load cast: ${esc(e.message)}</div>`;
+  }
+}
+
+function editWorldModal(storyId) {
+  api('GET', `/bibles/${storyId}/world/`).then(world => {
+    const editable = {
+      setting: world.setting || '',
+      time_period: world.time_period || '',
+      technology_level: world.technology_level || '',
+      social_structure: world.social_structure || '',
+      geography: world.geography || '',
+      magic_kind: world.magic_or_system?.kind || 'none',
+      magic_description: world.magic_or_system?.description || '',
+      banned_anachronisms: (world.banned_anachronisms || []).join('\n'),
+      must_have_vibes: (world.must_have_vibes || []).join('\n'),
+    };
+    openModal(`
+      <h3>Edit world bible</h3>
+      <div class="field">
+        <label>Setting${tip('worldSetting')}</label>
+        <textarea id="m-setting" class="tall" placeholder="An alpine frontier town in 1894, eight thousand feet up, snowed in three months a year. Silver mine just shut down. Population two hundred and falling. Rail line buried since November.">${esc(editable.setting)}</textarea>
+        <div class="hint">One paragraph anchor every scene must respect. Time, place, scale, mood.</div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Time period${tip('worldTimePeriod')}</label><input id="m-time" placeholder="1894-1895" value="${esc(editable.time_period)}" /></div>
+        <div class="field"><label>Technology${tip('worldTech')}</label><input id="m-tech" placeholder="early industrial, no antibiotics" value="${esc(editable.technology_level)}" /></div>
+        <div class="field"><label>Social structure${tip('worldSocial')}</label><input id="m-social" placeholder="frontier with rigid class lines" value="${esc(editable.social_structure)}" /></div>
+        <div class="field"><label>Geography${tip('worldGeography')}</label><input id="m-geo" placeholder="high alpine valley, one road in" value="${esc(editable.geography)}" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Magic kind${tip('worldMagicKind')}</label><select id="m-mkind">${['none','cultivation','litrpg','classical_magic','psionics','tech','other'].map(k => `<option ${k===editable.magic_kind?'selected':''}>${k}</option>`).join('')}</select></div>
+        <div class="field"><label>Magic description${tip('worldMagicDesc')}</label><textarea id="m-mdesc" placeholder="Cultivators draw qi from breath. Each realm has a clear breakthrough condition.">${esc(editable.magic_description)}</textarea></div>
+      </div>
+      <div class="field">
+        <label>Banned anachronisms${tip('worldBannedAnach')}</label>
+        <textarea id="m-anach" placeholder="smartphone&#10;automobile&#10;antibiotics&#10;passport&#10;therapist&#10;weekend">${esc(editable.banned_anachronisms)}</textarea>
+        <div class="hint">One per line. The deterministic strip + critics enforce these — the writer cannot mention them.</div>
+      </div>
+      <div class="field">
+        <label>Must-have vibes${tip('worldVibes')}</label>
+        <textarea id="m-vibes" placeholder="lantern-lit alleys&#10;coal smoke&#10;frozen pump handles&#10;incense haze on temple steps&#10;the click of an unlit oil lamp cooling">${esc(editable.must_have_vibes)}</textarea>
+        <div class="hint">One per line. Concrete sensory anchors only. The more specific, the better the atmosphere.</div>
+      </div>
+      <div class="row" style="margin-top:14px"><button id="m-save" class="primary">Save</button><button id="m-cancel">Cancel</button></div>
+    `, async () => {
+      const patch = {
+        setting: document.getElementById('m-setting').value,
+        time_period: document.getElementById('m-time').value,
+        technology_level: document.getElementById('m-tech').value,
+        social_structure: document.getElementById('m-social').value,
+        geography: document.getElementById('m-geo').value,
+        magic_or_system: { ...world.magic_or_system,
+          kind: document.getElementById('m-mkind').value,
+          description: document.getElementById('m-mdesc').value,
+        },
+        banned_anachronisms: document.getElementById('m-anach').value.split('\n').map(s => s.trim()).filter(Boolean),
+        must_have_vibes: document.getElementById('m-vibes').value.split('\n').map(s => s.trim()).filter(Boolean),
+      };
+      try {
+        await api('PATCH', `/bibles/${storyId}/world/patch/`, patch);
+        toast('World saved.', 'ok');
+        closeModal();
+        showBibleReview(storyId);
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  });
+}
+
+function editCharacterModal(storyId, characterId) {
+  api('GET', `/bibles/${storyId}/character/${characterId}/`).then(c => {
+    openModal(`
+      <h3>Edit ${esc(c.name)}</h3>
+      <div class="field-row">
+        <div class="field"><label>Name${tip('charName')}</label><input id="c-name" placeholder="Mara Holt" value="${esc(c.name)}" /></div>
+        <div class="field"><label>Tier${tip('charTier')}</label><select id="c-tier">${['main','recurring','side'].map(t => `<option ${t===c.tier?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Role${tip('charRole')}</label><input id="c-role" placeholder="protagonist, mentor, rival sect head..." value="${esc(c.role || '')}" /></div>
+      </div>
+      <div class="field">
+        <label>Short description</label>
+        <input id="c-short" placeholder="the town's only doctor, exhausted and stubborn" value="${esc(c.short_description || '')}" />
+        <div class="hint">One sentence summary used internally by the engine. Not shown to readers.</div>
+      </div>
+      <div class="field">
+        <label>Portrait blurb${tip('charPortrait')}</label>
+        <textarea id="c-port" placeholder="Forty, lean, smells of camphor. Always wears the same coat.">${esc(c.portrait_blurb || '')}</textarea>
+        <div class="hint">1-2 sentences. This is what readers see on the story page next to the character's name.</div>
+      </div>
+      <div class="field">
+        <label>Background${tip('charBackground')}</label>
+        <textarea id="c-bg" placeholder="Trained in Boston, returned home after her father died of silicosis. Has not slept properly in three weeks.">${esc(c.background || '')}</textarea>
+        <div class="hint">2-4 sentences of formative history. Specific events beat abstract claims.</div>
+      </div>
+      <div class="field">
+        <label>Motivations${tip('charMotivations')}</label>
+        <textarea id="c-mot" placeholder="Keep everyone alive through winter&#10;Find out who poisoned the well">${(c.motivations || []).join('\n')}</textarea>
+        <div class="hint">One per line, in priority order.</div>
+      </div>
+      <div class="field">
+        <label>Fears${tip('charFears')}</label>
+        <textarea id="c-fear" placeholder="Losing another patient she could have saved&#10;Becoming her mother">${(c.fears || []).join('\n')}</textarea>
+        <div class="hint">One per line. Drives the Goal-Conflict-Disaster engine on scenes they appear in.</div>
+      </div>
+      <div class="field">
+        <label>Arc${tip('charArc')}</label>
+        <textarea id="c-arc" placeholder="Learns to ask for help. By chapter 15 she lets Sam carry the kit.">${esc(c.arc || '')}</textarea>
+        <div class="hint">How this character changes by the end.</div>
+      </div>
+      <div class="field">
+        <label>Sample lines${tip('charSampleLines')}</label>
+        <textarea id="c-samples" class="tall" placeholder='I&apos;d say you&apos;ve got about an hour.&#10;Look. Sit down. Drink that.&#10;That is not what I said and you know it.&#10;He&apos;s lying. I&apos;ve watched him lie since we were twelve.&#10;Don&apos;t.&#10;If you came here to apologise, you&apos;re wasting both our time.'>${((c.voice_fingerprint?.sample_lines) || []).join('\n')}</textarea>
+        <div class="hint">One per line. 5-8 lines for main characters. The single highest-leverage character field — used as few-shot anchors for every dialogue.</div>
+      </div>
+      <div class="field">
+        <label>Banned phrases${tip('charBannedPhrases')}</label>
+        <textarea id="c-banned" placeholder="delve&#10;unwavering&#10;I shall">${((c.voice_fingerprint?.banned_phrases) || []).join('\n')}</textarea>
+        <div class="hint">One per line. Things this character would NEVER say. The Voice critic flags any draft that puts these in their mouth.</div>
+      </div>
+      <div class="row" style="margin-top:14px"><button id="m-save" class="primary">Save</button><button id="m-cancel">Cancel</button></div>
+    `, async () => {
+      const patch = {
+        name: document.getElementById('c-name').value,
+        tier: document.getElementById('c-tier').value,
+        role: document.getElementById('c-role').value,
+        short_description: document.getElementById('c-short').value,
+        portrait_blurb: document.getElementById('c-port').value,
+        background: document.getElementById('c-bg').value,
+        motivations: document.getElementById('c-mot').value.split('\n').map(s => s.trim()).filter(Boolean),
+        fears: document.getElementById('c-fear').value.split('\n').map(s => s.trim()).filter(Boolean),
+        arc: document.getElementById('c-arc').value,
+        voice_fingerprint: {
+          ...(c.voice_fingerprint || { lexical: {} }),
+          sample_lines: document.getElementById('c-samples').value.split('\n').map(s => s.trim()).filter(Boolean),
+          banned_phrases: document.getElementById('c-banned').value.split('\n').map(s => s.trim()).filter(Boolean),
+        },
+      };
+      try {
+        await api('PATCH', `/bibles/${storyId}/character/${characterId}/patch/`, patch);
+        toast('Character saved.', 'ok');
+        closeModal();
+        showBibleReview(storyId);
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  });
+}
+
+// ---- Story detail ------------------------------------------
+let activeEventSource = null;
+function closeStream() { if (activeEventSource) { activeEventSource.close(); activeEventSource = null; } }
+window.addEventListener('hashchange', closeStream);
+
+async function showStoryDetail(storyId) {
+  setActiveNav('stories');
+  closeStream();
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · Detail</div>
+    <div id="story-head"></div>
+    <div class="tabs" id="story-tabs">
+      <div class="tab active" data-tab="reader">Reader</div>
+      <div class="tab" data-tab="live">Live events</div>
+      <div class="tab" data-tab="skeleton">Skeleton</div>
+    </div>
+    <div id="tab-content"></div>
+  `;
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.toggle('active', x === t));
+    if (t.dataset.tab === 'reader') renderReaderTab(storyId);
+    else if (t.dataset.tab === 'live') renderLiveTab(storyId);
+    else renderSkeletonTab(storyId);
+  }));
+  renderReaderTab(storyId);
+  pollHead(storyId);
+}
+
+async function pollHead(storyId) {
+  async function once() {
+    try {
+      const story = await api('GET', `/stories/${storyId}/`);
+      const head = document.getElementById('story-head');
+      if (!head) return; // user navigated away
+      const totalCh = story.progress?.total_chapters || 0;
+      const writtenCh = (story.chapters || []).length;
+      head.innerHTML = `
+        <div class="row" style="margin-bottom:8px">
+          <h2 style="margin:0;flex:1">${esc(story.title || '(untitled)')}</h2>
+          <span class="badge ${story.status}" data-tip="${esc(TOOLTIPS['status_' + (story.status || 'pending')] || '')}">${STATUS_LABELS[story.status] || story.status}</span>
+        </div>
+        <div class="muted">${esc(story.progress?.message || '')}</div>
+        <div class="progress has-tip" data-tip="${esc(TOOLTIPS.progress_percent)}"><div class="progress-bar" style="width:${story.progress?.percent || 0}%"></div></div>
+        <div class="row" style="margin-top:12px">
+          ${story.status === 'pending' ? `<button class="primary" id="head-start" data-tip="Architect → Chapter Planner → scenes (draft → 5 critics → editor → humaniser) → continuity refresh.">▶ Start writing</button>` : ''}
+          ${story.status === 'awaiting_continue' ? `<button class="primary" id="head-continue" data-tip="Writes the next batch of chapters from where the engine paused.">▶ Continue next batch</button>` : ''}
+          ${(story.status === 'pending' || story.status === 'failed') ? `<a class="btn" href="#/stories/${esc(storyId)}/bibles">Edit bibles</a>` : ''}
+          ${(writtenCh > 0 && story.status !== 'writing' && story.status !== 'architecting' && story.status !== 'planning') ? `<button id="head-cascade" data-tip="Wipe everything from chapter N onward and re-write from there. Preserves the arc plan + earlier chapters.">↺ Regenerate from chapter…</button>` : ''}
+          ${!story.hidden ? `<button id="head-hide" data-tip="Soft-delete. The story stays in the database but disappears from the list.">Hide</button>` : `<button id="head-unhide">Unhide</button>`}
+        </div>
+      `;
+      head.querySelectorAll('[data-tip]').forEach(el => el.classList.add('has-tip'));
+      const startBtn = document.getElementById('head-start');
+      if (startBtn) startBtn.addEventListener('click', async () => {
+        try { await api('POST', `/stories/${storyId}/start/`, {}); toast('Queued.', 'ok'); pollHead(storyId); } catch (e) { toast(e.message, 'error'); }
+      });
+      const contBtn = document.getElementById('head-continue');
+      if (contBtn) contBtn.addEventListener('click', async () => {
+        const remaining = totalCh - writtenCh;
+        const def = Math.min(3, remaining);
+        const raw = window.prompt(`How many more chapters? (1 - ${remaining})`, String(def));
+        if (raw === null) return;
+        const n = parseInt(raw, 10);
+        if (!Number.isFinite(n) || n < 1) return toast('Enter a positive number.', 'error');
+        try { await api('POST', `/stories/${storyId}/continue/`, { additional_chapters: n }); toast('Continued.', 'ok'); pollHead(storyId); } catch (e) { toast(e.message, 'error'); }
+      });
+      const cascadeBtn = document.getElementById('head-cascade');
+      if (cascadeBtn) cascadeBtn.addEventListener('click', () => regenFromModal(storyId, totalCh));
+      const hideBtn = document.getElementById('head-hide');
+      if (hideBtn) hideBtn.addEventListener('click', async () => { try { await api('POST', `/stories/${storyId}/hide/`, {}); window.location.hash = '#/stories'; } catch (e) { toast(e.message, 'error'); } });
+      const unhideBtn = document.getElementById('head-unhide');
+      if (unhideBtn) unhideBtn.addEventListener('click', async () => { try { await api('POST', `/stories/${storyId}/unhide/`, {}); pollHead(storyId); } catch (e) { toast(e.message, 'error'); } });
+
+      // Live polling for running stories: every 4s
+      const transient = ['pending','architecting','planning','writing','running'];
+      if (transient.includes(story.status)) {
+        setTimeout(() => { if (window.location.hash.includes(storyId)) pollHead(storyId); }, 4000);
+      }
+    } catch (e) { /* silent */ }
+  }
+  await once();
+}
+
+async function renderReaderTab(storyId) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '<div class="muted">Loading...</div>';
+  try {
+    const story = await api('GET', `/stories/${storyId}/`);
+    const characters = story.characters || [];
+    const chapters = story.chapters || [];
+    c.innerHTML = `
+      ${characters.length ? `
+        <h3>Characters</h3>
+        <div class="grid grid-3">
+          ${characters.map(ch => `
+            <div class="card">
+              <div class="row"><span class="badge ${ch.tier}">${ch.tier}</span><strong>${esc(ch.name)}</strong></div>
+              <div class="muted" style="margin-top:6px">${esc(ch.role || '')}</div>
+              <div style="margin-top:6px;font-size:13px">${esc(ch.short_description || ch.portrait_blurb || '')}</div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <h3 style="margin-top:24px">Chapters</h3>
+      ${chapters.length ? chapters.map((ch, i) => `
+        <div class="chapter" data-idx="${i}">
+          <div class="chapter-head">
+            <h3>${esc(ch.chapter_number)}. ${esc(ch.title || 'Untitled chapter')}</h3>
+            <span class="muted">${ch.word_count || 0} words</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">▾</span>
+          </div>
+          <div class="chapter-body">${(ch.text || '').split('\n\n').map(p => `<p>${esc(p)}</p>`).join('')}</div>
+        </div>
+      `).join('') : '<div class="muted">No chapters yet. Start writing to see them appear.</div>'}
+
+      ${story.conclusion ? `
+        <h3 style="margin-top:24px">Conclusion</h3>
+        <div class="card">
+          <div class="muted">Total: ${story.conclusion.final_word_count} words</div>
+          ${story.conclusion.publisher_blurb ? `<p>${esc(story.conclusion.publisher_blurb)}</p>` : ''}
+          ${story.conclusion.unresolved_cliffhangers?.length ? `<div class="muted" style="margin-top:8px"><strong>Unresolved hooks:</strong><ul>${story.conclusion.unresolved_cliffhangers.map(u => `<li>${esc(u)}</li>`).join('')}</ul></div>` : ''}
+        </div>
+      ` : ''}
+    `;
+    c.querySelectorAll('.chapter-head').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('open'));
+    });
+  } catch (e) {
+    c.innerHTML = `<div class="card">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderLiveTab(storyId) {
+  closeStream();
+  const c = document.getElementById('tab-content');
+  c.innerHTML = `
+    <div class="row" style="margin-bottom:8px">
+      <span class="dot live" id="live-dot"></span>
+      <span class="muted" id="live-status">Connecting to SSE...</span>
+    </div>
+    <div class="events-panel">
+      <div class="events-panel-head">
+        <strong class="has-tip" data-tip="Server-Sent Events from the orchestrator. Every milestone in the pipeline emits one: arc.planned, chapter.planning, scene.started, scene.critique.report (×5 per scene), scene.editing, scene.humanising, scene.committed, chapter.committed, story.completed.">Live events</strong>
+        <span class="spacer"></span>
+        <span class="muted" style="font-size:12px">Last 200 events</span>
+      </div>
+      <div class="events-list" id="events"></div>
+    </div>
+    <div class="muted" style="margin-top:10px">SSE auto-reconnects on disconnect. Replay catches up via <code>?after_seq=N</code>. Heartbeat every 15s.</div>
+  `;
+  const evList = document.getElementById('events');
+  const evStatus = document.getElementById('live-status');
+  let lastSeq = 0;
+  const es = new EventSource(`${API}/stories/${storyId}/stream/?after_seq=0`);
+  activeEventSource = es;
+  es.onopen = () => { evStatus.textContent = 'Connected. Streaming events...'; };
+  es.onerror = () => { evStatus.textContent = 'Disconnected (will retry).'; };
+  function addEvent(typ, payload, seq, ts) {
+    const item = document.createElement('div');
+    item.className = 'event';
+    item.innerHTML = `<span class="ts">${esc((ts || '').slice(11, 19))}</span><span class="type">${esc(typ)}</span><span class="payload">${esc(JSON.stringify(payload).slice(0, 240))}</span>`;
+    evList.appendChild(item);
+    while (evList.children.length > 200) evList.removeChild(evList.firstChild);
+    evList.scrollTop = evList.scrollHeight;
+    if (typ === 'chapter.committed' || typ === 'story.completed') {
+      // Refresh reader tab when chapters land — but only if user has it open
+    }
+  }
+  es.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      lastSeq = data.seq || lastSeq;
+      addEvent(data.event_type || ev.type || 'message', data.payload || data, data.seq, data.ts);
+    } catch { addEvent(ev.type || 'message', ev.data, null, null); }
+  };
+  // Listen for specific event types as well (SSE multiplexes by `event:` field)
+  ['story.queued','arc.planned','chapter.planning','chapter.planned','scene.started','scene.drafted','scene.critique.report','scene.editing','scene.humanising','scene.committed','chapter.committed','story.batch_done','story.completed','story.failed','provider.throttled'].forEach(name => {
+    es.addEventListener(name, (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        lastSeq = data.seq || lastSeq;
+        addEvent(name, data.payload || data, data.seq, data.ts);
+      } catch {}
+    });
+  });
+}
+
+async function renderSkeletonTab(storyId) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '<div class="muted">Loading engine internals...</div>';
+  try {
+    const sk = await api('GET', `/stories/${storyId}/skeleton/`);
+    c.innerHTML = `
+      <div class="tabs">
+        <div class="tab active" data-sk="arc">Arc plan</div>
+        <div class="tab" data-sk="world">World bible</div>
+        <div class="tab" data-sk="cast">Cast (all tiers)</div>
+        <div class="tab" data-sk="beats">Beat sheets</div>
+        <div class="tab" data-sk="scenes">Scene drafts</div>
+        <div class="tab" data-sk="ledger">Continuity ledger</div>
+      </div>
+      <div id="sk-content"></div>
+    `;
+    const tabs = c.querySelectorAll('[data-sk]');
+    tabs.forEach(t => t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.toggle('active', x === t));
+      renderSk(t.dataset.sk, sk, storyId);
+    }));
+    renderSk('arc', sk, storyId);
+  } catch (e) {
+    c.innerHTML = `<div class="card">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderSk(name, sk, storyId) {
+  const c = document.getElementById('sk-content');
+  if (name === 'arc') {
+    const arc = sk.arc_plan || {};
+    c.innerHTML = `
+      <div class="card">
+        <h3>${esc(arc.arc_name || 'No arc plan yet')}</h3>
+        <div class="muted">${esc(arc.arc_theme || '')}</div>
+        <p style="margin-top:6px">${esc(arc.target_reader_journey || '')}</p>
+        <h3>Acts</h3>
+        ${(arc.acts || []).map(a => `<div class="card" style="background:var(--bg-2);margin-bottom:8px"><strong>${esc(a.name)}</strong> · chapters ${a.chapter_range?.[0]} → ${a.chapter_range?.[1]}<br/><span class="muted">${esc(a.promise || '')}</span></div>`).join('')}
+        <h3>Progression milestones</h3>
+        ${(arc.progression_milestones || []).map(m => `<div class="muted">• ch${m.target_chapter_idx}: ${esc(m.name)} <span class="badge ${m.delivered ? 'completed' : 'pending'}">${m.delivered ? 'delivered' : 'planned'}</span></div>`).join('') || '<div class="muted">—</div>'}
+        <h3>Plot seeds</h3>
+        ${(arc.plot_seeds || []).map(s => `<div class="muted">• <strong>${esc(s.title)}</strong> [planted ch${s.planted_chapter_idx} → payoff ch${s.payoff_target_chapter_idx || '?'}] <span class="key">${esc(s.status)}</span><br/>${esc(s.summary || '')}</div>`).join('') || '<div class="muted">—</div>'}
+      </div>
+    `;
+  } else if (name === 'world') {
+    c.innerHTML = `<pre>${esc(JSON.stringify(sk.world_bible || {}, null, 2))}</pre>`;
+  } else if (name === 'cast') {
+    c.innerHTML = (sk.character_bibles || []).map(ch => `
+      <div class="card" style="margin-bottom:8px">
+        <div class="row"><span class="badge ${ch.tier}">${ch.tier}</span><strong>${esc(ch.name)}</strong><span class="muted">${esc(ch.role || '')}</span></div>
+        <div class="muted">${esc(ch.short_description || '')}</div>
+        ${ch.voice_fingerprint ? `<details><summary class="muted">Voice fingerprint</summary><pre>${esc(JSON.stringify(ch.voice_fingerprint, null, 2))}</pre></details>` : ''}
+        ${ch.mood_state_history?.length ? `<details><summary class="muted">Mood history (${ch.mood_state_history.length} snapshots)</summary><pre>${esc(JSON.stringify(ch.mood_state_history.slice(-3), null, 2))}</pre></details>` : ''}
+      </div>
+    `).join('');
+  } else if (name === 'beats') {
+    c.innerHTML = (sk.beat_sheets || []).map(b => `
+      <div class="card" style="margin-bottom:8px">
+        <h3>Chapter ${b.chapter_idx + 1}: ${esc(b.chapter_title || '')}</h3>
+        <div class="muted">${esc(b.chapter_summary || '')}</div>
+        <div style="margin-top:6px"><strong>Opening:</strong> ${esc(b.opening_hook || '—')}</div>
+        <div><strong>Cliffhanger:</strong> ${esc(b.cliffhanger || '—')}</div>
+        <details style="margin-top:8px"><summary class="muted">${(b.scenes || []).length} scenes</summary><pre>${esc(JSON.stringify(b.scenes || [], null, 2))}</pre></details>
+      </div>
+    `).join('') || '<div class="muted">No beat sheets yet.</div>';
+  } else if (name === 'scenes') {
+    c.innerHTML = (sk.scene_drafts || []).map(sc => `
+      <div class="scene-card" data-ch="${sc.chapter_idx}" data-sc="${sc.scene_idx}">
+        <div class="scene-head">
+          <strong>ch${sc.chapter_idx + 1} · sc${sc.scene_idx + 1}</strong>
+          <span class="muted has-tip" data-tip="${esc(TOOLTIPS.wordCount)}">${sc.word_count || 0} words</span>
+          ${typeof sc.cycle_count === 'number' ? `<span class="muted has-tip" data-tip="${esc(TOOLTIPS.cycleCount)}">${sc.cycle_count} cycle${sc.cycle_count === 1 ? '' : 's'}</span>` : ''}
+          <span class="spacer"></span>
+          <button data-regen="${sc.chapter_idx}:${sc.scene_idx}" data-tip="Re-run draft → 5 critics → editor → humaniser for this one scene. Downstream state untouched.">Regenerate</button>
+          <button data-edit="${sc.chapter_idx}:${sc.scene_idx}" data-tip="Replace the prose with text you type. Saving runs the deterministic humaniser pass on your edit.">Edit prose</button>
+        </div>
+        <div class="muted">${esc(sc.summary || '')}</div>
+        <details style="margin-top:6px"><summary class="muted">Final prose</summary><div class="scene-prose">${esc(sc.final_prose || '')}</div></details>
+        <details style="margin-top:6px"><summary class="muted">Critic findings (${(sc.critic_reports || []).reduce((a, r) => a + (r.findings || []).length, 0)})</summary>
+          <div class="findings">${(sc.critic_reports || []).map(r => `
+            <div style="margin:6px 0"><strong>${esc(r.critic)}</strong> · score ${r.score?.toFixed(2) ?? '—'}</div>
+            ${(r.findings || []).map(f => `<div class="finding"><span class="sev-${f.severity} has-tip" data-tip="${esc(TOOLTIPS['sev_' + f.severity] || '')}">[${esc(f.severity)}]</span><span>${esc(f.field || '')}</span><span class="muted">${esc(f.suggestion || f.rationale || '')}</span></div>`).join('')}
+          `).join('')}</div>
+        </details>
+        ${sc.humanisation_report ? `<details style="margin-top:6px"><summary class="muted has-tip" data-tip="${esc(TOOLTIPS.humanisation)}">Humanisation report</summary><pre>${esc(JSON.stringify(sc.humanisation_report, null, 2))}</pre></details>` : ''}
+      </div>
+    `).join('') || '<div class="muted">No scenes drafted yet.</div>';
+    c.querySelectorAll('button[data-tip]').forEach(b => b.classList.add('has-tip'));
+    c.querySelectorAll('[data-regen]').forEach(b => b.addEventListener('click', () => regenSceneModal(storyId, ...b.dataset.regen.split(':').map(Number))));
+    c.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editSceneProseModal(storyId, ...b.dataset.edit.split(':').map(Number))));
+  } else if (name === 'ledger') {
+    c.innerHTML = `<pre>${esc(JSON.stringify(sk.continuity_ledger || {}, null, 2))}</pre>`;
+  }
+}
+
+function regenSceneModal(storyId, chapter_idx, scene_idx) {
+  openModal(`
+    <h3>Regenerate scene ${chapter_idx + 1}.${scene_idx + 1}</h3>
+    <div class="muted">This redrafts only this scene. Continuity downstream (later scenes' mood histories) is left alone. Use <strong>Regenerate from here</strong> on the Story page if you want a full cascade.</div>
+    <div class="field" style="margin-top:10px">
+      <label>Notes for the writer (optional)<span class="tip-icon" data-tip="Free-form steering. Appended to the scene beat under [USER NOTES]. The writer treats these as instructions on top of the existing beat.">?</span></label>
+      <textarea id="r-notes" class="tall" placeholder="Make Mara colder. She suspects Sam is lying about the well. Open mid-conversation, no establishing paragraph. Cut the sensory detail about coal smoke (already used in chapter 2). End on the moment she puts the kit down without saying goodbye."></textarea>
+      <div class="hint">Be specific about what to change. Tone, character beats, sensory anchors, pacing.</div>
+    </div>
+    <div class="row" style="margin-top:14px"><button id="m-save" class="primary">Regenerate</button><button id="m-cancel">Cancel</button></div>
+  `, async () => {
+    try {
+      toast('Regenerating...');
+      await api('POST', `/stories/${storyId}/regenerate-scene/`, { chapter_idx, scene_idx, user_notes: document.getElementById('r-notes').value || undefined });
+      toast('Scene regenerated.', 'ok');
+      closeModal();
+      showStoryDetail(storyId);
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+function regenFromModal(storyId, totalChapters) {
+  openModal(`
+    <h3>Regenerate from chapter…</h3>
+    <div class="muted">Wipes all scenes + beat sheets + mood-history entries from this point forward, then re-launches the orchestrator. The arc plan is preserved. Earlier chapters are kept.</div>
+    <div class="field" style="margin-top:12px">
+      <label>Restart from chapter<span class="tip-icon" data-tip="The 1-indexed chapter number where regeneration begins. Everything from this chapter onward is replaced.">?</span></label>
+      <input id="rf-ch" type="number" min="1" max="${totalChapters}" placeholder="e.g. 5" />
+      <div class="hint">Existing chapter 1 through (N-1) are kept verbatim. Chapter N onward gets re-written.</div>
+    </div>
+    <div class="field">
+      <label>Start at scene (within that chapter)<span class="tip-icon" data-tip="Optional. Defaults to 0 (start of the chapter). Set to N to keep scenes 0..N-1 inside that chapter and only rewrite from scene N onward.">?</span></label>
+      <input id="rf-sc" type="number" min="0" placeholder="0" value="0" />
+      <div class="hint">Leave at 0 to rewrite the whole chapter from the top.</div>
+    </div>
+    <div class="row" style="margin-top:14px"><button id="m-save" class="danger">Wipe & regenerate</button><button id="m-cancel">Cancel</button></div>
+  `, async () => {
+    const chN = parseInt(document.getElementById('rf-ch').value, 10);
+    const scN = parseInt(document.getElementById('rf-sc').value || '0', 10);
+    if (!Number.isFinite(chN) || chN < 1 || chN > totalChapters) {
+      return toast(`Chapter must be between 1 and ${totalChapters}.`, 'error');
+    }
+    try {
+      await api('POST', `/stories/${storyId}/regenerate-from/`, { chapter_idx: chN - 1, scene_idx: scN });
+      toast('Cascade regenerate queued.', 'ok');
+      closeModal();
+      showStoryDetail(storyId);
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+function editSceneProseModal(storyId, chapter_idx, scene_idx) {
+  api('GET', `/stories/${storyId}/skeleton/chapters/${chapter_idx}/scenes/`).then(d => {
+    const scene = (d.scenes || []).find(s => s.scene_idx === scene_idx);
+    openModal(`
+      <h3>Edit prose · ch${chapter_idx + 1}.sc${scene_idx + 1}</h3>
+      <div class="muted">Manual prose override. Saving runs the deterministic humaniser pass on what you wrote — em-dashes you typed get stripped, banned phrases get replaced, contractions get injected into dialogue.</div>
+      <div class="field" style="margin-top:10px">
+        <label>Prose<span class="tip-icon" data-tip="Plain text. Use blank lines to separate paragraphs. The humaniser will not touch your sentence-level wording, only enforce the deterministic rules.">?</span></label>
+        <textarea id="e-prose" style="min-height:420px;font-family:var(--serif);font-size:15px;line-height:1.75" placeholder="Mara hung her coat by the door. It dripped. The lamp on the hall table was nearly out, and she did not bother to fix it.&#10;&#10;'You're back,' Sam said from the kitchen.&#10;&#10;'I'm back.'">${esc(scene?.final_prose || '')}</textarea>
+        <div class="hint">Saved as the canonical final prose. The previous draft is preserved in <code>draft_history</code> so you can roll back via the API.</div>
+      </div>
+      <div class="row" style="margin-top:14px"><button id="m-save" class="primary">Save</button><button id="m-cancel">Cancel</button></div>
+    `, async () => {
+      try {
+        await api('PATCH', `/stories/${storyId}/scenes/${chapter_idx}/${scene_idx}/`, { prose: document.getElementById('e-prose').value, run_humaniser: true });
+        toast('Saved.', 'ok');
+        closeModal();
+        showStoryDetail(storyId);
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  });
+}
+
+// ---- Profiles ----------------------------------------------
+async function showProfilesList() {
+  setActiveNav('profiles');
+  app.innerHTML = `
+    <div class="row" style="margin-bottom:18px">
+      <h2 style="flex:1;margin:0">Author profiles</h2>
+      <a class="btn primary" href="#/profiles/new">+ New profile</a>
+    </div>
+    <div id="profiles" class="stack"></div>
+  `;
+  const wrap = document.getElementById('profiles');
+  wrap.innerHTML = '<div class="muted">Loading...</div>';
+  try {
+    const data = await api('GET', '/profiles/');
+    const profiles = data.profiles || [];
+    if (!profiles.length) {
+      wrap.innerHTML = '<div class="card"><div class="muted">No profiles yet. Profiles are reusable author voices — create one and any story can use it.</div></div>';
+      return;
+    }
+    wrap.innerHTML = profiles.map(p => `
+      <a class="card clickable" href="#/profiles/${esc(p.mongo_id || p.profile_id)}">
+        <div class="row">
+          <strong style="flex:1">${esc(p.name)}</strong>
+          <span class="muted">${fmtDate(p.created_at)}</span>
+        </div>
+        <div class="muted">${esc((p.expertise_tags || []).join(', ') || '—')}</div>
+      </a>
+    `).join('');
+  } catch (e) {
+    wrap.innerHTML = `<div class="card">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function showProfileNew() {
+  setActiveNav('profiles');
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/profiles">Profiles</a> · New</div>
+    <h2>Create author profile</h2>
+    <div class="muted" style="margin-bottom:14px">Profiles are reusable: pick one when creating a story and the engine bakes your voice into the prose. Anything you don't fill is inferred from the samples.</div>
+    <div class="card">
+      <div class="field">
+        <label>Name *${tip('profileName')}</label>
+        <input id="p-name" placeholder="M. Holt" />
+        <div class="hint">Shown in the story-creation dropdowns. Often your name or pen name.</div>
+      </div>
+      <div class="field">
+        <label>Bio context${tip('profileBio')}</label>
+        <textarea id="p-bio" placeholder="Frontier doctor turned novelist. Uses short sentences. Dry humour. Never names emotions outright."></textarea>
+        <div class="hint">Free-form bio. Used to infer voice when there are no writing samples. Specific habits beat abstract descriptions.</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Background${tip('profileBg')}</label>
+          <textarea id="p-bg" placeholder="Grew up in mining towns. Trained at a state medical school."></textarea>
+          <div class="hint">Your professional/life background. Influences narrative register.</div>
+        </div>
+        <div class="field">
+          <label>Personality${tip('profilePers')}</label>
+          <textarea id="p-pers" placeholder="Stubborn. Observational. Suspicious of metaphor."></textarea>
+          <div class="hint">Affects emotional defaults — humor type, interiority density, vulnerability handling.</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Communication style${tip('profileComm')}</label>
+          <textarea id="p-comm" placeholder="Direct. Quiet. Withholds praise. Says things once."></textarea>
+          <div class="hint">How you communicate generally. Concise, layered, deflective, theatrical...</div>
+        </div>
+        <div class="field">
+          <label>Quirks${tip('profileQuirks')}</label>
+          <textarea id="p-quirk" placeholder="Never names emotions outright. Compares people to weather."></textarea>
+          <div class="hint">Specific verbal/written habits. Most useful when very concrete.</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Interests and values${tip('profileInt')}</label>
+        <textarea id="p-int" placeholder="Self-reliance, herbal medicine, blizzards, the dignity of small acts."></textarea>
+        <div class="hint">What you care about. Influences thematic emphasis.</div>
+      </div>
+      <div class="field">
+        <label>Writing samples${tip('profileSamples')}</label>
+        <textarea id="p-samples" class="xtall" placeholder="The first storm came on a Tuesday. By Wednesday the rail line was gone and Mara had set three bones in a kitchen by lamplight. The Polish boy with the crushed foot. The Irishwoman with the dislocated shoulder. The mortician's youngest, who had walked his sled into a juniper trunk because the snow had erased the path. She did them in that order. The Polish boy first because he was screaming.&#10;&#10;She did not say what she had come to say. Instead she watched her mother stir something with one wooden spoon and gesture at the cupboard with the other, eyebrows asking a question she didn't need to answer out loud. Bowls. Yes. She got up and got the bowls down. The smaller ones, because her mother's hands had gotten tired this year, and the smaller ones were lighter. The radio kept talking. The garlic kept browning. Mira set the table for two and lost her nerve completely."></textarea>
+        <div class="hint">2-4 passages, separate with a blank line. The single highest-leverage profile field — the Profiler derives lexical statistics directly from these.</div>
+      </div>
+      <div class="field">
+        <label>Expertise tags${tip('profileTags')}</label>
+        <input id="p-tags" placeholder="literary, frontier, medical, slow-burn" />
+        <div class="hint">Comma separated. Used for matching profiles to stories.</div>
+      </div>
+      <div class="row" style="margin-top:10px"><button id="p-create" class="primary">Create profile</button></div>
+    </div>
+  `;
+  document.getElementById('p-create').addEventListener('click', async () => {
+    const body = {
+      name: document.getElementById('p-name').value.trim(),
+      bio_context: document.getElementById('p-bio').value.trim(),
+      background: document.getElementById('p-bg').value.trim(),
+      personality: document.getElementById('p-pers').value.trim(),
+      communication_style: document.getElementById('p-comm').value.trim(),
+      quirks: document.getElementById('p-quirk').value.trim(),
+      interests_and_values: document.getElementById('p-int').value.trim(),
+      writing_samples: document.getElementById('p-samples').value.split('\n\n').map(s => s.trim()).filter(Boolean),
+      expertise_tags: document.getElementById('p-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+      additional_context: '',
+    };
+    if (!body.name) return toast('Name is required.', 'error');
+    try {
+      toast('Building voice fingerprint...');
+      const r = await api('POST', '/profiles/generate/', body);
+      toast('Profile created.', 'ok');
+      window.location.hash = `#/profiles/${r.profile_id}`;
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+async function showProfileDetail(profileId) {
+  setActiveNav('profiles');
+  app.innerHTML = `<div class="breadcrumb"><a href="#/profiles">Profiles</a> · Detail</div><div id="profile-body" class="muted">Loading...</div>`;
+  try {
+    const p = await api('GET', `/profiles/${profileId}/`);
+    document.getElementById('profile-body').innerHTML = `
+      <h2>${esc(p.name)}</h2>
+      <div class="card">
+        <h3>Lexical fingerprint</h3>
+        <pre>${esc(JSON.stringify(p.lexical_fingerprint || {}, null, 2))}</pre>
+        <h3>Emotional defaults</h3>
+        <pre>${esc(JSON.stringify(p.emotional_defaults || {}, null, 2))}</pre>
+        ${p.preferred_phrases?.length ? `<h3>Preferred phrases</h3><div class="muted">${p.preferred_phrases.map(s => `"${esc(s)}"`).join(', ')}</div>` : ''}
+        ${p.banned_phrases?.length ? `<h3>Banned phrases</h3><div class="muted">${p.banned_phrases.map(s => `"${esc(s)}"`).join(', ')}</div>` : ''}
+        ${p.few_shot_samples?.length ? `<h3>Few-shot samples (${p.few_shot_samples.length})</h3>${p.few_shot_samples.map(s => `<div class="card" style="background:var(--bg-2);margin:6px 0;font-family:var(--serif);font-size:15px">${esc(s)}</div>`).join('')}` : ''}
+      </div>
+    `;
+  } catch (e) {
+    document.getElementById('profile-body').innerHTML = `<div class="card">Failed: ${esc(e.message)}</div>`;
+  }
+}
+
+/* ============================================================
+ * Modal helper
+ * ============================================================ */
+
+function openModal(html, onSave) {
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  back.id = 'modal-backdrop';
+  back.innerHTML = `<div class="modal">${html}</div>`;
+  document.body.appendChild(back);
+  const save = back.querySelector('#m-save');
+  const cancel = back.querySelector('#m-cancel');
+  if (save && onSave) save.addEventListener('click', onSave);
+  if (cancel) cancel.addEventListener('click', closeModal);
+  back.addEventListener('click', (e) => { if (e.target === back) closeModal(); });
+}
+function closeModal() {
+  const back = document.getElementById('modal-backdrop');
+  if (back) back.remove();
+}
+
+// ---- Boot --------------------------------------------------
+route();
+</script>
+</body>
+</html>

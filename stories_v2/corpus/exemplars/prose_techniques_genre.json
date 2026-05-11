@@ -1,0 +1,38 @@
+[
+  {
+    "id": "tech_cultivation_01",
+    "source": "original_technique_example",
+    "techniques": ["sensory_anchoring", "interior_monologue", "show_dont_tell"],
+    "genres": ["cultivation", "generic"],
+    "pov": "third_limited",
+    "pacing": "balanced",
+    "emotion_tags": ["anticipation", "fear", "joy"],
+    "style_register": "casual",
+    "text": "He sat cross-legged on the stone and breathed. The mountain breathed back, slow and indifferent. Beneath the courtyard, beneath the foundation, beneath the roots of the old plum tree, something turned. He could not have said what. Only that the air, here, on this terrace, this morning, was thicker than it had been yesterday. He drew it in. It tasted like cold iron and pine. The qi he had been chasing for a year and a half slipped past his collarbone, and his heart, the stupid organ, started to pound, which was the worst possible thing it could do right now. He breathed. He waited. He let his heart make whatever noise it wanted to make. The qi paused. He did not reach for it. After a long moment, like a fish deciding the bait was not a trick after all, it returned, and entered, and settled into his lower dantian with a feeling he would later describe to no one because no one would have understood.",
+    "notes": "Cultivation power moment. Power lives in the body, not in stats. Avoids '+50 cultivation' style and stays grounded in breath and metaphor."
+  },
+  {
+    "id": "tech_litrpg_01",
+    "source": "original_technique_example",
+    "techniques": ["interior_monologue", "show_dont_tell", "sentence_variety"],
+    "genres": ["litrpg", "isekai", "generic"],
+    "pov": "first",
+    "pacing": "balanced",
+    "emotion_tags": ["surprise", "joy", "anticipation"],
+    "style_register": "casual",
+    "text": "I had been about to die. I had been, in fact, mid-die. The wolf was on my chest. My left arm was useless and bent the wrong way at the elbow, and I was kicking at the wolf with one leg and trying to get my fingers around the dagger I had dropped about a meter to my right, and the wolf was about to take my throat.\n\nThen the wolf wasn't.\n\nThe wolf was on the ground, three meters away, and not breathing. There was a notification in the corner of my vision. I had not asked for the notification. The notification was waiting politely, the way a hotel concierge waits.\n\n[Skill Unlocked: Last Stand. Trigger: imminent death. Duration: 4 seconds. Cooldown: not yet determined.]\n\nFour seconds. I had used four seconds. I had used them, apparently, to throw an adult wolf the length of a kitchen.\n\nI lay on my back and breathed and watched the leaves move and thought, in the calm and faintly delirious way you think after you should be dead, that I would like to know what color my bruises were going to be tomorrow.",
+    "notes": "LitRPG system message integrated without breaking voice. The notification is described in character (polite hotel concierge), not in raw schema. Power moment ends in pain, not triumph."
+  },
+  {
+    "id": "tech_isekai_01",
+    "source": "original_technique_example",
+    "techniques": ["interior_monologue", "subtext", "contraction_dense_dialogue"],
+    "genres": ["isekai", "light_novel", "generic"],
+    "pov": "first",
+    "pacing": "balanced",
+    "emotion_tags": ["surprise", "fear", "joy"],
+    "style_register": "casual",
+    "text": "The woman at the inn counter looked at me like she had looked at a thousand people in her life and found me only mildly surprising.\n\n\"You don't speak the language,\" she said.\n\nI did not speak the language. The fact that I could understand her saying I did not speak the language was, statistically, the most interesting thing that had happened to me in three days, and three days ago I had been hit by a truck. So the bar was high.\n\n\"I can,\" I tried. The words came out wrong. Different mouth shape. Different something. \"I can a little.\"\n\nShe smiled the smile of someone who had heard worse. \"Sit down. Eat. You can owe me.\"\n\n\"I don't have\"\n\n\"You can owe me,\" she said again, with the patient force of a woman who had run an inn through at least two regime changes and was not going to argue with a man whose shoes were the wrong shape.\n\nI sat down. I ate. The stew was salty and beautiful, and I tried very hard not to cry into it, because that, in any world, was bad inn etiquette.",
+    "notes": "Isekai displacement shown through small mismatches (wrong mouth shape, wrong shoe shape) rather than infodump. Humor as armor over genuine vulnerability."
+  }
+]

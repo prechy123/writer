@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'stories',
+    'stories_v2',
 ]
 
 MIDDLEWARE = [
@@ -248,6 +249,24 @@ MIN_CHAPTER_WORDS = int(os.getenv("MIN_CHAPTER_WORDS", "2000"))
 DEFAULT_INITIAL_CHAPTERS = int(os.getenv("DEFAULT_INITIAL_CHAPTERS", "3"))
 
 # ---------------------------------------------------------------------------
+# stories_v2 — provider stack locked to Groq + Together AI
+# ---------------------------------------------------------------------------
+# Read by stories_v2/providers/router.py via os.getenv. Settings here exist
+# so the router can also see them via django.conf.settings.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+
+# Together AI is shared with v1 (TOGETHER_API_KEY already declared above).
+TOGETHER_BASE_URL = os.getenv("TOGETHER_BASE_URL", "https://api.together.xyz/v1")
+
+# Force Atlas $vectorSearch even on a non-SRV URI (e.g. local Atlas tunnel).
+MONGODB_ATLAS_VECTOR = os.getenv("MONGODB_ATLAS_VECTOR", "")
+
+# Optional GPTZero / Originality.ai key — enables the v2 humanisation
+# detector gate. Leave blank to disable the external detector pass.
+STORIES_V2_AI_DETECTOR_KEY = os.getenv("STORIES_V2_AI_DETECTOR_KEY", "")
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -268,6 +287,11 @@ LOGGING = {
     },
     "loggers": {
         "stories": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "stories_v2": {
             "handlers": ["console"],
             "level": LOG_LEVEL,
             "propagate": False,

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "tech_sensory_01",
+    "source": "original_technique_example",
+    "techniques": ["sensory_anchoring", "show_dont_tell", "sentence_variety"],
+    "genres": ["generic"],
+    "pov": "third_limited",
+    "pacing": "balanced",
+    "emotion_tags": ["fear", "anticipation"],
+    "style_register": "casual",
+    "text": "She found the room by smell first. Cold metal. Something older underneath. Like rust soaked through paper and left to dry on a windowsill. The door wasn't locked. It had been, once, and someone had peeled the lock out with a small tool, leaving the wood around it splintered. She breathed through her mouth. Counted. Three. Two. One. The handle moved without sound, which was wrong, because handles in old buildings like this one did not move without sound. Someone had oiled it. Recently. Her hand stayed on the wood. She listened. The hallway behind her was still empty. The room ahead of her was not.",
+    "notes": "Opens with smell rather than sight. Sentence length varies from one word to twenty. Interiority embedded inside action. No 'felt scared' — fear lives in the body."
+  },
+  {
+    "id": "tech_sensory_02",
+    "source": "original_technique_example",
+    "techniques": ["sensory_anchoring", "subtext", "mid_paragraph_tonal_shift"],
+    "genres": ["generic"],
+    "pov": "third_limited",
+    "pacing": "slow_burn",
+    "emotion_tags": ["sadness", "trust"],
+    "style_register": "casual",
+    "text": "Her mother's kitchen smelled the way it always had. Toasted garlic. Burnt rice at the bottom of the pot her mother refused to throw away. The radio in the next room talking about traffic on a road neither of them drove anymore. Mira sat down at the table. She did not say what she had come to say. Instead she watched her mother stir something with one wooden spoon and gesture at the cupboard with the other, eyebrows asking a question she didn't need to answer out loud. Bowls. Yes. She got up and got the bowls down. The smaller ones, because her mother's hands had gotten tired this year, and the smaller ones were lighter. The radio kept talking. The garlic kept browning. Mira set the table for two and lost her nerve completely.",
+    "notes": "Whole emotional weight carried by the unspoken thing. Tonal shift at 'lost her nerve completely' lands harder because the paragraph was so domestic until then."
+  }
+]

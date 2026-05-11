@@ -18,9 +18,12 @@ from django.contrib import admin
 from django.urls import include, path
 
 from stories.views import stories_dashboard
+from stories_v2.views import dashboard as v2_dashboard
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('stories.urls')),
+    path('api/v2/', include('stories_v2.urls')),
+    path('v2/', v2_dashboard, name='v2-dashboard'),
     path('', stories_dashboard, name='stories-dashboard'),
 ]

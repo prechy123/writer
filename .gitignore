@@ -88,3 +88,9 @@ local_settings.py
 .env
 db.sqlite3
 .vercel
+.env.production
+*.docx
+*.pdf
+./venv
+venv/*
+.claude

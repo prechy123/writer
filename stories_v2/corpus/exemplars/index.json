@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "description": "Bundled exemplar corpus for stories_v2. Add public-domain genre passages (Project Gutenberg, etc.) as additional .json files in this directory and they will be picked up by load_index() automatically.",
+  "files": [
+    "prose_techniques_sensory.json",
+    "prose_techniques_dialogue.json",
+    "prose_techniques_action.json",
+    "prose_techniques_interior.json",
+    "prose_techniques_genre.json"
+  ],
+  "techniques_indexed": [
+    "sensory_anchoring",
+    "show_dont_tell",
+    "sentence_variety",
+    "subtext",
+    "mid_paragraph_tonal_shift",
+    "interruption",
+    "silence_and_deflection",
+    "contraction_dense_dialogue",
+    "visceral_action",
+    "interior_monologue"
+  ],
+  "extension_notes": "For genre-specific exemplars, add files like cultivation_extended.json with passages from public-domain works (e.g., older Wuxia translations no longer under copyright). Tag each entry with the same schema."
+}
