@@ -20,9 +20,9 @@ ROLE = """You are the Character Forge. Produce a cast of characters for a story,
 
 Return a single JSON object. Schema:
 
-{
+{{
   "characters": [
-    {
+    {{
       "name": "<str>",
       "tier": "main|recurring|side",
       "role": "<short, e.g. 'protagonist', 'mentor', 'rival sect head'>",
@@ -39,10 +39,10 @@ Return a single JSON object. Schema:
       "resources_or_limitations": "<concise>",
       "knowledge_sources": [<str>, ...],
       "relationships": [
-        { "other_name": "<str>", "nature": "ally|rival|mentor|family|romantic|enemy|acquaintance", "tension": <1-10>, "history": "<concise>" }
+        {{ "other_name": "<str>", "nature": "ally|rival|mentor|family|romantic|enemy|acquaintance", "tension": <1-10>, "history": "<concise>" }}
       ],
-      "voice_fingerprint": {
-        "lexical": {
+      "voice_fingerprint": {{
+        "lexical": {{
           "avg_sentence_words": <float>,
           "sentence_length_stddev": <float>,
           "contraction_rate": <float>,
@@ -51,19 +51,19 @@ Return a single JSON object. Schema:
           "dialect_markers": [<str>, ...],
           "profanity_rate": <float>,
           "hedging_rate": <float>
-        },
+        }},
         "preferred_phrases": [<str>, ...],
         "banned_phrases": [<str>, ...],
         "verbal_tics": [<str>, ...],
         "catchphrases": [<str>, ...],
         "sample_lines": [<str>, ...],     // 5-8 verbatim lines THIS character could plausibly say
         "silence_style": "<concise>"
-      },
+      }},
       "webnovel_role_hook": "<concise>",
       "progression_function": "<concise>"
-    }
+    }}
   ]
-}
+}}
 
 BUDGET RULES (HARD):
 - The cast must contain between {main_min}-{main_max} MAIN characters, {recurring_min}-{recurring_max} RECURRING, and {side_min}-{side_max} SIDE.
