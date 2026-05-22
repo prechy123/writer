@@ -635,6 +635,7 @@ const ROUTES = [
   { path: /^#\/stories\/new\/quick\/?$/, handler: showQuickWizard },
   { path: /^#\/stories\/new\/deep\/?$/, handler: showDeepWizard },
   { path: /^#\/stories\/new\/paste\/?$/, handler: showPasteWizard },
+  { path: /^#\/stories\/new\/import\/?$/, handler: showImportWizard },
   { path: /^#\/stories\/([^/]+)\/bibles\/?$/, handler: (m) => showBibleReview(m[1]) },
   { path: /^#\/stories\/([^/]+)\/?$/, handler: (m) => showStoryDetail(m[1]) },
   { path: /^#\/stories\/([^/]+)\/skeleton\/?$/, handler: (m) => showSkeleton(m[1]) },
@@ -707,6 +708,11 @@ function showStoryPicker() {
         <div class="pick-tag">~ 2 minutes</div>
         <h3>Paste anything</h3>
         <div class="muted">Drop in notes, a draft chapter, a worldbook. We extract structure and pre-fill the Deep wizard.</div>
+      </a>
+      <a class="card clickable pick-card" href="#/stories/new/import">
+        <div class="pick-tag">~ 5 minutes</div>
+        <h3>Import past chapters</h3>
+        <div class="muted">Paste prior chapters as canon, describe where the story goes next, and pick or auto-generate a profile. The engine continues from chapter N+1.</div>
       </a>
     </div>
   `;
@@ -1115,6 +1121,376 @@ function showPasteWizard() {
   });
 }
 
+// ---- Shared: profile <select> helper -----------------------
+async function populateProfileSelect(selectEl, currentId) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '<option value="">— select a profile —</option>';
+  try {
+    const data = await api('GET', '/profiles/');
+    for (const p of (data.profiles || [])) {
+      const id = p.mongo_id || p.profile_id;
+      if (!id) continue;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = p.name || id;
+      if (currentId && id === currentId) opt.selected = true;
+      selectEl.appendChild(opt);
+    }
+  } catch (e) { /* leave empty — caller will see no options */ }
+}
+
+// ---- Import-past-chapters wizard ----------------------------
+const IMPORT_DRAFT_KEY = 'v2-import-draft';
+const IMPORT_DRAFT_VERSION = 1;
+
+function _importDefaultState() {
+  return {
+    version: IMPORT_DRAFT_VERSION,
+    title: '',
+    chapters: [{ title: '', text: '' }],
+    description: '',
+    chapters_to_generate: 3,
+    end_story: false,
+    profile_mode: 'generate',     // 'select' | 'generate'
+    profile_id: '',
+    new_profile_name: '',
+    new_profile_bio: '',
+    saved_at: null,
+  };
+}
+
+function _loadImportDraft() {
+  try {
+    const raw = localStorage.getItem(IMPORT_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== IMPORT_DRAFT_VERSION) return null;
+    if (!Array.isArray(parsed.chapters) || !parsed.chapters.length) return null;
+    return parsed;
+  } catch (e) { return null; }
+}
+
+function _saveImportDraft(state) {
+  try {
+    state.saved_at = new Date().toISOString();
+    localStorage.setItem(IMPORT_DRAFT_KEY, JSON.stringify(state));
+  } catch (e) { /* quota or disabled — silently ignore */ }
+}
+
+function _clearImportDraft() {
+  try { localStorage.removeItem(IMPORT_DRAFT_KEY); } catch (e) {}
+}
+
+function showImportWizard() {
+  setActiveNav('stories');
+  const stored = _loadImportDraft();
+  const state = stored || _importDefaultState();
+
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="#/stories">Stories</a> · <a href="#/stories/new">New</a> · Import</div>
+    <h2>Import past chapters</h2>
+    <div class="muted" style="margin-bottom:14px">Paste prior chapters as canon. The engine treats them as already-written and generates chapter N+1 onward, matching the voice and continuity.</div>
+    ${stored ? `
+      <div id="i-restore-banner" class="card" style="background:var(--bg-2);margin-bottom:14px;display:flex;align-items:center;gap:12px">
+        <div class="muted" style="flex:1">Restored your draft from ${esc(fmtDate(stored.saved_at) || 'earlier')}.</div>
+        <button id="i-discard-draft">Discard draft</button>
+      </div>
+    ` : ''}
+
+    <div class="card">
+      <div class="field">
+        <label>Story title (optional)</label>
+        <input id="i-title" placeholder="The Long Winter" />
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin-top:0">Prior chapters (canon)</h3>
+      <div class="muted" style="margin-bottom:10px">Each paste becomes one chapter. Add or remove as needed. The order here is the order in the story. Each chapter needs at least 50 characters.</div>
+      <div id="i-ch-list" class="stack"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="i-add-chapter">+ Add chapter</button>
+        <span id="i-ch-count" class="muted" style="margin-left:8px"></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="field">
+        <label>How the story should go from here *</label>
+        <textarea id="i-desc" class="tall" placeholder="What happens next? Where does the story go? Who do these new chapters spend time with, what threads close, what new ones open?"></textarea>
+        <div class="hint">At least 20 characters. This is the planner's brief for chapter N+1 onward — be concrete.</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>New chapters to generate *</label>
+          <input id="i-count" type="number" min="1" max="200" value="3" />
+        </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px">
+          <input id="i-end" type="checkbox" />
+          <label for="i-end" style="margin:0;cursor:pointer">End the story this batch</label>
+        </div>
+      </div>
+      <div class="hint">If checked, the last generated chapter is written as a finale and the story is marked complete. Leave off to keep it open for future continues.</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin-top:0">Author voice profile</h3>
+      <div class="field" style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="i-pmode" value="generate" /> <span><strong>Generate from these chapters</strong> — extract the voice automatically.</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="i-pmode" value="select" /> <span><strong>Use an existing profile</strong> — pick one you've built before.</span>
+        </label>
+      </div>
+
+      <div id="i-generate-block" class="field" style="margin-top:10px">
+        <label>Profile name *</label>
+        <input id="i-pname" placeholder="e.g. M. Holt" />
+        <label style="margin-top:10px">About the author (optional)</label>
+        <textarea id="i-pbio" placeholder="Background, sensibility, anything that should colour the voice beyond what's in the chapters." style="min-height:80px"></textarea>
+      </div>
+
+      <div id="i-select-block" class="field" style="margin-top:10px;display:none">
+        <label>Profile</label>
+        <select id="i-pselect"></select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:18px">
+      <button id="i-create" class="primary">Create story</button>
+      <a class="btn" href="#/stories/new">Cancel</a>
+    </div>
+  `;
+
+  // Bind the discard-draft button if shown.
+  const discardBtn = document.getElementById('i-discard-draft');
+  if (discardBtn) discardBtn.addEventListener('click', () => {
+    if (!confirm('Discard the saved draft?')) return;
+    _clearImportDraft();
+    showImportWizard();
+  });
+
+  const chList = document.getElementById('i-ch-list');
+  const chCount = document.getElementById('i-ch-count');
+
+  function renderChapters() {
+    chList.innerHTML = state.chapters.map((c, i) => `
+      <div class="card" data-ch-idx="${i}" style="background:var(--bg-2)">
+        <div class="row">
+          <strong style="flex:1">Chapter ${i + 1}</strong>
+          <button class="i-ch-remove" data-idx="${i}" ${state.chapters.length <= 1 ? 'disabled' : ''}>Remove</button>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Title (optional)</label>
+          <input class="i-ch-title" data-idx="${i}" value="${esc(c.title || '')}" placeholder="Chapter ${i + 1}" />
+        </div>
+        <div class="field">
+          <label>Text *</label>
+          <textarea class="i-ch-text" data-idx="${i}" style="min-height:220px" placeholder="Paste the chapter prose here.">${esc(c.text || '')}</textarea>
+          <div class="hint">${(c.text || '').length} chars · min 50</div>
+        </div>
+      </div>
+    `).join('');
+    chCount.textContent = `${state.chapters.length} chapter${state.chapters.length === 1 ? '' : 's'}`;
+    chList.querySelectorAll('.i-ch-title').forEach(el => el.addEventListener('input', e => {
+      state.chapters[parseInt(e.target.dataset.idx, 10)].title = e.target.value;
+      scheduleSave();
+    }));
+    chList.querySelectorAll('.i-ch-text').forEach(el => el.addEventListener('input', e => {
+      const idx = parseInt(e.target.dataset.idx, 10);
+      state.chapters[idx].text = e.target.value;
+      // Update the hint inline without a full re-render (preserves cursor).
+      const hint = el.parentElement.querySelector('.hint');
+      if (hint) hint.textContent = `${(e.target.value || '').length} chars · min 50`;
+      scheduleSave();
+    }));
+    chList.querySelectorAll('.i-ch-remove').forEach(btn => btn.addEventListener('click', e => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      if (state.chapters.length <= 1) return;
+      state.chapters.splice(idx, 1);
+      renderChapters();
+      scheduleSave();
+    }));
+  }
+  renderChapters();
+
+  document.getElementById('i-add-chapter').addEventListener('click', () => {
+    state.chapters.push({ title: '', text: '' });
+    renderChapters();
+    scheduleSave();
+  });
+
+  // Top-level fields
+  const titleEl = document.getElementById('i-title');
+  const descEl = document.getElementById('i-desc');
+  const countEl = document.getElementById('i-count');
+  const endEl = document.getElementById('i-end');
+  const pnameEl = document.getElementById('i-pname');
+  const pbioEl = document.getElementById('i-pbio');
+  const pselectEl = document.getElementById('i-pselect');
+  const generateBlock = document.getElementById('i-generate-block');
+  const selectBlock = document.getElementById('i-select-block');
+
+  titleEl.value = state.title;
+  descEl.value = state.description;
+  countEl.value = state.chapters_to_generate;
+  endEl.checked = !!state.end_story;
+  pnameEl.value = state.new_profile_name;
+  pbioEl.value = state.new_profile_bio;
+
+  document.querySelectorAll('input[name="i-pmode"]').forEach(r => {
+    r.checked = (r.value === state.profile_mode);
+    r.addEventListener('change', () => {
+      if (!r.checked) return;
+      state.profile_mode = r.value;
+      generateBlock.style.display = (r.value === 'generate') ? '' : 'none';
+      selectBlock.style.display = (r.value === 'select') ? '' : 'none';
+      if (r.value === 'select') populateProfileSelect(pselectEl, state.profile_id);
+      scheduleSave();
+    });
+  });
+  // Apply initial visibility
+  generateBlock.style.display = (state.profile_mode === 'generate') ? '' : 'none';
+  selectBlock.style.display = (state.profile_mode === 'select') ? '' : 'none';
+  if (state.profile_mode === 'select') populateProfileSelect(pselectEl, state.profile_id);
+
+  // Autosave wiring
+  let saveTimer = null;
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => _saveImportDraft(state), 500);
+  }
+  titleEl.addEventListener('input', e => { state.title = e.target.value; scheduleSave(); });
+  descEl.addEventListener('input', e => { state.description = e.target.value; scheduleSave(); });
+  countEl.addEventListener('input', e => { state.chapters_to_generate = parseInt(e.target.value, 10) || 1; scheduleSave(); });
+  endEl.addEventListener('change', e => { state.end_story = e.target.checked; scheduleSave(); });
+  pnameEl.addEventListener('input', e => { state.new_profile_name = e.target.value; scheduleSave(); });
+  pbioEl.addEventListener('input', e => { state.new_profile_bio = e.target.value; scheduleSave(); });
+  pselectEl.addEventListener('change', e => { state.profile_id = e.target.value; scheduleSave(); });
+
+  // Submit
+  document.getElementById('i-create').addEventListener('click', async () => {
+    // Client-side validation
+    if (!state.chapters.length) return toast('Add at least one chapter.', 'error');
+    for (let i = 0; i < state.chapters.length; i++) {
+      const t = state.chapters[i].text || '';
+      if (t.length < 50) return toast(`Chapter ${i + 1} needs at least 50 characters.`, 'error');
+    }
+    if ((state.description || '').length < 20) return toast('Description must be at least 20 characters.', 'error');
+    const cnt = parseInt(state.chapters_to_generate, 10);
+    if (!Number.isFinite(cnt) || cnt < 1) return toast('Generate at least 1 new chapter.', 'error');
+    if (state.profile_mode === 'select' && !state.profile_id) return toast('Pick a profile or switch to "generate".', 'error');
+    if (state.profile_mode === 'generate' && !(state.new_profile_name || '').trim()) return toast('Enter a name for the new profile.', 'error');
+
+    const payload = {
+      title: state.title.trim() || undefined,
+      chapters: state.chapters.map(c => ({
+        title: (c.title || '').trim() || undefined,
+        text: c.text,
+      })),
+      description: state.description,
+      chapters_to_generate: cnt,
+      end_story: !!state.end_story,
+      profile_mode: state.profile_mode,
+    };
+    if (state.profile_mode === 'select') {
+      payload.profile_id = state.profile_id;
+    } else {
+      payload.new_profile_name = state.new_profile_name.trim();
+      if (state.new_profile_bio && state.new_profile_bio.trim()) {
+        payload.new_profile_bio = state.new_profile_bio.trim();
+      }
+    }
+
+    const btn = document.getElementById('i-create');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Building bibles...';
+    try {
+      toast('Parsing chapters + building bibles...');
+      const r = await api('POST', '/stories/import/', payload);
+      _clearImportDraft();
+      toast(`Imported ${r.chapters_imported} chapter${r.chapters_imported === 1 ? '' : 's'}. Review bibles next.`, 'ok');
+      window.location.hash = `#/stories/${r.story_id}/bibles`;
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = orig;
+      toast(e.message, 'error');
+    }
+  });
+}
+
+// ---- Continue dialog (story detail) ------------------------
+function continueDialog(storyId, story) {
+  const totalCh = story.progress?.total_chapters || (story.chapters || []).length;
+  const writtenCh = (story.chapters || []).length;
+  const remaining = Math.max(1, totalCh - writtenCh);
+  const def = Math.min(3, remaining);
+  const currentProfileId = (story.quick_survey?.profile_id) || '';
+
+  // Build a modal overlay.
+  const overlay = document.createElement('div');
+  overlay.id = 'continue-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,15,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;';
+  overlay.innerHTML = `
+    <div class="card" style="max-width:520px;width:100%;background:var(--bg);box-shadow:0 12px 40px rgba(0,0,0,0.2)">
+      <h3 style="margin-top:0">Continue writing</h3>
+      <div class="field">
+        <label>How many more chapters</label>
+        <input id="cd-count" type="number" min="1" max="200" value="${def}" />
+        <div class="hint">Currently at chapter ${writtenCh} of ${totalCh}. Asking for more than ${remaining} will extend the total.</div>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:8px">
+        <input id="cd-end" type="checkbox" />
+        <label for="cd-end" style="margin:0;cursor:pointer">End the story this batch (write a finale)</label>
+      </div>
+      <div class="field">
+        <label>Profile</label>
+        <select id="cd-profile"></select>
+        <div id="cd-warn" class="hint" style="color:var(--accent-2);display:none;margin-top:6px">
+          ⚠ Switching profiles will change the narrative voice from this batch onward. Existing chapters won't be rewritten.
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;justify-content:flex-end">
+        <button id="cd-cancel">Cancel</button>
+        <button id="cd-go" class="primary">Continue writing</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  function close() { if (overlay.parentElement) overlay.parentElement.removeChild(overlay); }
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.getElementById('cd-cancel').addEventListener('click', close);
+
+  const selectEl = document.getElementById('cd-profile');
+  const warnEl = document.getElementById('cd-warn');
+  populateProfileSelect(selectEl, currentProfileId);
+  selectEl.addEventListener('change', () => {
+    warnEl.style.display = (selectEl.value && selectEl.value !== currentProfileId) ? '' : 'none';
+  });
+
+  document.getElementById('cd-go').addEventListener('click', async () => {
+    const n = parseInt(document.getElementById('cd-count').value, 10);
+    if (!Number.isFinite(n) || n < 1) return toast('Enter a positive number.', 'error');
+    const payload = { additional_chapters: n, end_story: document.getElementById('cd-end').checked };
+    if (selectEl.value && selectEl.value !== currentProfileId) payload.profile_id = selectEl.value;
+    const goBtn = document.getElementById('cd-go');
+    goBtn.disabled = true;
+    try {
+      await api('POST', `/stories/${storyId}/continue/`, payload);
+      toast('Continued.', 'ok');
+      close();
+      pollHead(storyId);
+    } catch (e) {
+      goBtn.disabled = false;
+      toast(e.message, 'error');
+    }
+  });
+}
+
+
 // ---- Bible review (between create and start) ---------------
 async function showBibleReview(storyId) {
   setActiveNav('stories');
@@ -1130,9 +1506,16 @@ async function showBibleReview(storyId) {
       <button id="edit-world" style="margin-top:10px">Edit world bible</button>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-bottom:14px">
       <h3>Characters</h3>
       <div id="cast-block" class="stack"></div>
+    </div>
+
+    <div class="card" id="imported-card" style="display:none">
+      <h3 style="margin-top:0">Imported chapters</h3>
+      <div class="muted" style="margin-bottom:10px">These are the chapters you pasted. The engine treats them as canon — chapter N+1 onward will continue from them. You can fix typos or titles below before clicking Start.</div>
+      <div id="imported-block" class="stack"></div>
+      <div class="hint" style="margin-top:10px">Edits only affect canon for the chapters not yet written. Once you click Start writing, these become read-only.</div>
     </div>
   `;
   document.getElementById('review-actions').innerHTML = `
@@ -1146,6 +1529,9 @@ async function showBibleReview(storyId) {
       window.location.hash = `#/stories/${storyId}`;
     } catch (e) { toast(e.message, 'error'); }
   });
+
+  // Load imported chapters (only renders if the story has any).
+  loadImportedChapters(storyId);
 
   // Load world
   const worldBlock = document.getElementById('world-block');
@@ -1193,6 +1579,73 @@ async function showBibleReview(storyId) {
   } catch (e) {
     castBlock.innerHTML = `<div class="muted">Failed to load cast: ${esc(e.message)}</div>`;
   }
+}
+
+async function loadImportedChapters(storyId) {
+  const card = document.getElementById('imported-card');
+  const block = document.getElementById('imported-block');
+  if (!card || !block) return;
+  try {
+    const story = await api('GET', `/stories/${storyId}/`);
+    const imported = (story.chapters || []).filter(c => c.source === 'imported');
+    if (!imported.length) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = '';
+    const editable = (story.status === 'pending');
+    block.innerHTML = imported.map(c => `
+      <div class="card" style="background:var(--bg-2)" data-ch-idx="${c.chapter_idx}">
+        <div class="row">
+          <strong style="flex:1">Chapter ${c.chapter_number}: ${esc(c.title || '')}</strong>
+          <span class="muted">${c.word_count || 0} words</span>
+          ${editable ? `<button data-edit-imported="${c.chapter_idx}">Edit</button>` : `<span class="muted">read-only</span>`}
+        </div>
+        ${c.summary ? `<div class="muted" style="margin-top:6px">${esc(c.summary)}</div>` : ''}
+      </div>
+    `).join('');
+    if (editable) {
+      block.querySelectorAll('[data-edit-imported]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.editImported, 10);
+          const ch = imported.find(x => x.chapter_idx === idx);
+          editImportedChapterModal(storyId, ch);
+        });
+      });
+    }
+  } catch (e) {
+    card.style.display = '';
+    block.innerHTML = `<div class="muted">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function editImportedChapterModal(storyId, chapter) {
+  openModal(`
+    <h3>Edit imported chapter ${chapter.chapter_number}</h3>
+    <div class="field">
+      <label>Title</label>
+      <input id="im-title" value="${esc(chapter.title || '')}" placeholder="Chapter ${chapter.chapter_number}" />
+    </div>
+    <div class="field">
+      <label>Text *</label>
+      <textarea id="im-text" style="min-height:300px">${esc(chapter.text || '')}</textarea>
+      <div class="hint">Minimum 50 characters.</div>
+    </div>
+    <div class="row" style="margin-top:14px"><button id="m-save" class="primary">Save</button><button id="m-cancel">Cancel</button></div>
+  `, async () => {
+    const title = document.getElementById('im-title').value;
+    const text = document.getElementById('im-text').value;
+    if ((text || '').length < 50) { toast('Text must be at least 50 characters.', 'error'); return; }
+    try {
+      await api('PATCH', `/stories/${storyId}/imported-chapter/${chapter.chapter_idx}/`, {
+        title: title,
+        text: text,
+      });
+      toast('Saved.', 'ok');
+      closeModal();
+      loadImportedChapters(storyId);
+    } catch (e) { toast(e.message, 'error'); }
+  });
 }
 
 function editWorldModal(storyId) {
@@ -1395,15 +1848,7 @@ async function pollHead(storyId) {
         try { await api('POST', `/stories/${storyId}/start/`, {}); toast('Queued.', 'ok'); pollHead(storyId); } catch (e) { toast(e.message, 'error'); }
       });
       const contBtn = document.getElementById('head-continue');
-      if (contBtn) contBtn.addEventListener('click', async () => {
-        const remaining = totalCh - writtenCh;
-        const def = Math.min(3, remaining);
-        const raw = window.prompt(`How many more chapters? (1 - ${remaining})`, String(def));
-        if (raw === null) return;
-        const n = parseInt(raw, 10);
-        if (!Number.isFinite(n) || n < 1) return toast('Enter a positive number.', 'error');
-        try { await api('POST', `/stories/${storyId}/continue/`, { additional_chapters: n }); toast('Continued.', 'ok'); pollHead(storyId); } catch (e) { toast(e.message, 'error'); }
-      });
+      if (contBtn) contBtn.addEventListener('click', () => continueDialog(storyId, story));
       const cascadeBtn = document.getElementById('head-cascade');
       if (cascadeBtn) cascadeBtn.addEventListener('click', () => regenFromModal(storyId, totalCh));
       const hideBtn = document.getElementById('head-hide');

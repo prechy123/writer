@@ -30,6 +30,7 @@ async def run_chapter(
     recent_summary: Optional[str] = None,
     open_threads: Optional[List[Any]] = None,
     author_profile_hint: Optional[Dict[str, Any]] = None,
+    continuation_brief: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run one chapter end-to-end. Returns a summary dict."""
     act_name, position_in_act = find_act_for_chapter(arc, chapter_idx)
@@ -49,6 +50,7 @@ async def run_chapter(
         world_bible=world_bible,
         recent_summary=recent_summary,
         open_threads=open_threads,
+        continuation_brief=continuation_brief,
     )
 
     # Persist beat sheet
@@ -76,6 +78,7 @@ async def run_chapter(
             cast=cast,
             arc_seeds=arc_seeds,
             author_profile_hint=author_profile_hint,
+            continuation_brief=continuation_brief,
         )
         scenes_committed.append(scene_doc)
 

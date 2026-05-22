@@ -24,6 +24,7 @@ async def build_arc_plan(
     world_bible: Optional[Dict[str, Any]] = None,
     cast: Optional[List[Dict[str, Any]]] = None,
     arc_preferences: Optional[Dict[str, Any]] = None,
+    continuation_brief: Optional[str] = None,
     router: Optional[Router] = None,
 ) -> ArcPlan:
     router = router or get_router()
@@ -37,6 +38,7 @@ async def build_arc_plan(
         world_bible=world_bible,
         cast=cast,
         arc_preferences=arc_preferences,
+        continuation_brief=continuation_brief,
     )
 
     try:

@@ -18,6 +18,8 @@ editor, continuity_v2, publisher_v2) land in their own files.
 from .architect import build_arc_plan, find_act_for_chapter
 from .chapter_planner import plan_chapter
 from .character_forge import forge_cast
+from .continuity_from_imported import extract_continuity_from_imported
+from .deepener import deepen_scene
 from .editor import edit_scene, should_rerun_critics
 from .paste_parser import parse_pasted_notes
 from .profiler_v2 import build_profile
@@ -29,7 +31,9 @@ __all__ = [
     "find_act_for_chapter",
     "plan_chapter",
     "forge_cast",
+    "deepen_scene",
     "edit_scene",
+    "extract_continuity_from_imported",
     "should_rerun_critics",
     "parse_pasted_notes",
     "build_profile",

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from .. import mongo
 from ..agents import (
+    deepen_scene,
     draft_scene,
     edit_scene,
     should_rerun_critics,
@@ -25,6 +26,7 @@ from ..agents.critics import (
     critique_voice,
 )
 from ..humanisation import humanise
+from ..humanisation.repetition import load_prior_scenes_prose
 from ..memory import assemble_context
 from ..providers import get_router
 from ..schemas_v2 import (
@@ -50,6 +52,7 @@ async def run_scene(
     cast: List[CharacterBibleV2],
     arc_seeds: Optional[List[Dict[str, Any]]] = None,
     author_profile_hint: Optional[Dict[str, Any]] = None,
+    continuation_brief: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute one scene end-to-end. Returns the persisted SceneDraft dict."""
     scene_idx = scene_beat.scene_idx
@@ -85,6 +88,8 @@ async def run_scene(
             present_characters=present_chars,
             author_profile_hint=author_profile_hint,
             router=router,
+            continuation_brief=continuation_brief,
+            chapter_idx=chapter_idx,
         )
     except Exception as exc:
         logger.exception("scene_runner: draft failed (story=%s ch=%s sc=%s)", story_id, chapter_idx, scene_idx)
@@ -140,9 +145,45 @@ async def run_scene(
             logger.warning("scene_runner: edit failed (%s) — keeping prior draft", exc)
             break
 
-    # 4. Deterministic humanise
+    # 3.5. Deepener pass — runs only when prose is surface-clean but
+    # the heuristic detects atmosphere-without-interiority. Skips fast
+    # when not needed; high temperature when it does run.
+    has_errors = any(
+        f.severity == "error" for r in critic_reports for f in r.findings
+    )
+    pov_character = None
+    for c in present_chars:
+        if c.character_id == scene_beat.pov_character_id:
+            pov_character = c
+            break
+    final_prose, deepener_report = await deepen_scene(
+        prose=final_prose,
+        scene_beat=scene_beat,
+        pov_character=pov_character,
+        present_characters=present_chars,
+        overall_critic_score=min((r.score for r in critic_reports), default=1.0),
+        has_critic_errors=has_errors,
+    )
+    if deepener_report.get("ran"):
+        await emit(story_id, "scene.deepened", {
+            "chapter_idx": chapter_idx, "scene_idx": scene_idx,
+            "growth_ratio": deepener_report.get("growth_ratio"),
+        })
+
+    # 4. Deterministic humanise — fetch prior committed scenes so the
+    # cross-scene repetition detector can strip verbatim recycles.
     await emit(story_id, "scene.humanising", {"chapter_idx": chapter_idx, "scene_idx": scene_idx})
-    final_prose, humanise_report = await humanise(final_prose, present_characters=present_chars)
+    try:
+        prior_scenes = load_prior_scenes_prose(
+            story_id, chapter_idx=chapter_idx, scene_idx=scene_idx, lookback=6,
+        )
+    except Exception:
+        prior_scenes = []
+    final_prose, humanise_report = await humanise(
+        final_prose,
+        present_characters=present_chars,
+        prior_scenes_prose=prior_scenes,
+    )
 
     # 5. Continuity refresh + mood updates
     continuity = await refresh_continuity(

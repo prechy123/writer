@@ -28,11 +28,17 @@ async def draft_scene(
     author_profile_hint: Optional[Dict[str, Any]] = None,
     router: Optional[Router] = None,
     target_words: Optional[int] = None,
+    continuation_brief: Optional[str] = None,
+    chapter_idx: Optional[int] = None,
 ) -> str:
     """Produce a first-pass scene draft. Returns prose only."""
     router = router or get_router()
 
-    voice_few_shot = build_scene_few_shot(present_characters)
+    voice_few_shot = build_scene_few_shot(
+        present_characters,
+        scene_idx=scene_beat.scene_idx,
+        chapter_idx=chapter_idx,
+    )
     corpus_exemplars = _resolve_exemplars(scene_beat.retrieved_exemplar_ids)
 
     working = _working_payload(memory)
@@ -51,6 +57,7 @@ async def draft_scene(
         semantic_context=semantic_payload,
         episodic_excerpts=memory.episodic_scenes or [],
         author_profile_hint=author_profile_hint,
+        continuation_brief=continuation_brief,
     )
 
     max_tokens = _scene_max_tokens(target_words or scene_beat.target_words)

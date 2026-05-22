@@ -98,6 +98,7 @@ def build_user_prompt(
     world_bible: Optional[Dict[str, Any]] = None,
     recent_summary: Optional[str] = None,
     open_threads: Optional[List[Any]] = None,
+    continuation_brief: Optional[str] = None,
 ) -> str:
     parts = [
         f"Chapter slot: index {chapter_idx} (chapter {chapter_idx + 1})",
@@ -105,8 +106,14 @@ def build_user_prompt(
         f"Position in act: {chapter_position_in_act:.2f}",
         f"Target chapter words: {target_chapter_words} (soft band ±30%)",
     ]
+    if continuation_brief and continuation_brief.strip():
+        parts.append(
+            "AUTHOR'S CONTINUATION BRIEF (what the user wants to happen across the upcoming "
+            "chapters — anchor scene goals + disasters in this):\n"
+            + continuation_brief.strip()
+        )
     parts.append(
-        "Reader emotion targets per Kishōtenketsu phase (Plutchik dicts — match these closely in reader_*_emotion fields):\n"
+        "Reader emotion targets per Kishōtenketsu phase (Plutchik dicts. Match these closely in reader_*_emotion fields):\n"
         + json.dumps(reader_emotion_targets, indent=2, default=str)
     )
     parts.append(
@@ -125,6 +132,11 @@ def build_user_prompt(
         parts.append(f"Recent story summary:\n{recent_summary}")
     if open_threads:
         parts.append("Open plot threads (consider weaving):\n" + json.dumps(open_threads, indent=2, default=str))
+    parts.append(
+        "HARD RULE: every scene MUST have a non-empty goal, conflict, disaster, and location. "
+        "If you don't know yet, invent something specific that fits the kisho_phase. "
+        "Empty strings will be rejected."
+    )
     parts.append("Return the ChapterPlanV2 JSON now. No prose around it.")
     return "\n\n".join(parts)
 

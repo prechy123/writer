@@ -36,7 +36,9 @@ async def edit_scene(
             system=SYSTEM,
             messages=[{"role": "user", "content": user_prompt}],
             max_tokens=_max_tokens_for(scene_beat.target_words),
-            temperature=0.55,
+            # Match-or-exceed writer temp (writer = 0.85). A colder editor
+            # produces blander rewrites than drafts; v1 had this exact bug.
+            temperature=0.88,
             timeout=180.0,
         )
     except Exception as exc:

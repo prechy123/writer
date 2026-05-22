@@ -497,14 +497,18 @@
     }
 
     function shouldPoll(status) {
-      return status === "pending" || status === "running";
+      return status === "pending"
+        || status === "running"
+        || status === "writing"
+        || status === "architecting"
+        || status === "planning";
     }
 
-    function scheduleDetailPoll(storyId, status) {
+    function scheduleDetailPoll(storyId, status, source = "v1") {
       clearDetailPoll();
       if (!shouldPoll(status)) return;
       detailPollTimer = setTimeout(() => {
-        loadDetail(storyId, { silent: true });
+        loadDetail(storyId, { silent: true }, source);
       }, 5000);
     }
 
@@ -546,12 +550,23 @@
       history.pushState(null, "", "#");
     }
 
-    function showDetail(storyId) {
+    function showDetail(storyId, source = "v1") {
       clearDetailPoll();
       document.getElementById("page-list").classList.add("hidden");
       document.getElementById("page-detail").classList.remove("hidden");
-      history.pushState(null, "", "#story=" + storyId);
-      loadDetail(storyId);
+      const hashId = source === "v2" ? "v2:" + storyId : storyId;
+      history.pushState(null, "", "#story=" + hashId);
+      loadDetail(storyId, {}, source);
+    }
+
+    /* Parse "#story=<id>" or "#story=v2:<id>" → {storyId, source} or null */
+    function parseStoryHash(hash) {
+      if (!hash.startsWith("#story=")) return null;
+      const raw = hash.slice(7);
+      if (raw.startsWith("v2:")) {
+        return { storyId: raw.slice(3), source: "v2" };
+      }
+      return { storyId: raw, source: "v1" };
     }
 
     /* ── Load story list ────────────────────────────────────────── */
@@ -567,22 +582,68 @@
       $list.classList.add("hidden");
 
       try {
-        const res = await fetch(API + "/stories/");
-        if (!res.ok) throw new Error("Server returned " + res.status);
-        const data = await res.json();
+        const [v1Res, v2Res] = await Promise.allSettled([
+          fetch(API + "/stories/"),
+          fetch("/api/v2/stories/"),
+        ]);
+
+        const warnings = [];
+        let v1Items = [];
+        let v2Items = [];
+
+        if (v1Res.status === "fulfilled" && v1Res.value.ok) {
+          const v1Data = await v1Res.value.json();
+          v1Items = (Array.isArray(v1Data) ? v1Data : []).map(s => ({ ...s, _source: "v1" }));
+        } else {
+          warnings.push("v1");
+        }
+
+        if (v2Res.status === "fulfilled" && v2Res.value.ok) {
+          const v2Data = await v2Res.value.json();
+          const v2List = (v2Data && Array.isArray(v2Data.stories)) ? v2Data.stories : [];
+          v2Items = v2List.map(s => ({
+            story_id: s.story_id,
+            title: s.title,
+            status: s.status,
+            progress: s.progress,
+            num_chapters: s.total_chapters ?? s.num_chapters ?? 0,
+            created_at: s.created_at,
+            updated_at: s.updated_at,
+            _source: "v2",
+          }));
+        } else {
+          warnings.push("v2");
+        }
+
+        const data = [...v1Items, ...v2Items].sort((a, b) => {
+          const at = new Date(a.updated_at || 0).getTime();
+          const bt = new Date(b.updated_at || 0).getTime();
+          return bt - at;
+        });
 
         $loading.classList.add("hidden");
 
         if (!data.length) {
-          $empty.classList.remove("hidden");
+          if (warnings.length === 2) {
+            $error.textContent = "Failed to load stories from both v1 and v2.";
+            $error.classList.remove("hidden");
+          } else {
+            $empty.classList.remove("hidden");
+          }
           return;
         }
 
+        if (warnings.length === 1) {
+          $error.textContent = "Note: failed to load " + warnings[0] + " stories. Showing the rest.";
+          $error.classList.remove("hidden");
+        }
+
         $list.innerHTML = data.map(s => `
-          <li onclick="showDetail('${s.story_id}')">
+          <li onclick="showDetail('${s.story_id}', '${s._source}')">
             <div class="story-row">
               <span class="story-title">${esc(s.title)}</span>
               ${badge(s.status)}
+              ${s._source === "v2" ? '<span class="badge badge-pending" style="margin-left:6px">v2</span>' : ""}
             </div>
             <div class="story-meta">
               ${s.num_chapters} chapter${s.num_chapters===1?"":"s"}
@@ -603,7 +664,7 @@
     }
 
     /* ── Load story detail ──────────────────────────────────────── */
-    async function loadDetail(storyId, options = {}) {
+    async function loadDetail(storyId, options = {}, source = "v1") {
       const $loading = document.getElementById("detail-loading");
       const $error = document.getElementById("detail-error");
       const $content = document.getElementById("detail-content");
@@ -615,11 +676,24 @@
       $error.classList.add("hidden");
 
       try {
-        const res = await fetch(API + "/stories/" + storyId + "/");
+        const url = source === "v2"
+          ? "/api/v2/stories/" + storyId + "/"
+          : API + "/stories/" + storyId + "/";
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Server returned " + res.status);
         const s = await res.json();
 
         $loading.classList.add("hidden");
+
+        if (source === "v2") {
+          $content.innerHTML = renderV2Detail(s);
+          $content.classList.remove("hidden");
+          scheduleDetailPoll(storyId, s.status, "v2");
+          if (!options.silent) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+          return;
+        }
 
         let html = "";
 
@@ -959,7 +1033,7 @@
 
         $content.innerHTML = html;
         $content.classList.remove("hidden");
-        scheduleDetailPoll(storyId, s.status);
+        scheduleDetailPoll(storyId, s.status, "v1");
         if (!options.silent) {
           window.scrollTo({
             top: 0,
@@ -972,6 +1046,105 @@
         $error.textContent = "Failed to load story: " + err.message;
         $error.classList.remove("hidden");
       }
+    }
+
+    /* ── Render v2 reader payload ─────────────────────────────── */
+    function renderV2Detail(s) {
+      const chapters = Array.isArray(s.chapters) ? s.chapters : [];
+      const characters = Array.isArray(s.characters) ? s.characters : [];
+      let html = "";
+
+      /* Header */
+      html += `<div class="detail-header">
+        <h2>${esc(s.title)}</h2>
+        <div class="detail-meta">
+          ${badge(s.status)}
+          <span class="badge badge-pending">v2</span>
+          <span>${chapters.length} chapter${chapters.length === 1 ? "" : "s"}</span>
+          ${s.created_at ? `<span>Created ${fmtDate(s.created_at)}</span>` : ""}
+        </div>
+      </div>`;
+
+      html += renderProgress({
+        status: s.status,
+        progress: s.progress,
+        num_chapters: chapters.length,
+      });
+
+      /* Characters */
+      if (characters.length) {
+        html += `<div class="section">
+          <div class="section-label">Characters</div>`;
+        characters.forEach(c => {
+          const metaBits = [];
+          if (c.role) metaBits.push(esc(c.role));
+          if (c.tier) metaBits.push(esc(c.tier));
+          html += `<div class="character-card" style="margin-bottom:14px">
+            <p><strong>${esc(c.name || "")}</strong>${metaBits.length ? ` <span style="font-size:13px;color:#888">(${metaBits.join(" · ")})</span>` : ""}</p>
+            ${c.short_description ? `<p style="margin-top:4px">${esc(c.short_description)}</p>` : ""}
+            ${c.portrait_blurb ? `<p style="margin-top:4px;font-style:italic;font-size:13px;color:#777">${esc(c.portrait_blurb)}</p>` : ""}
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      /* Chapters */
+      if (chapters.length) {
+        html += `<hr class="divider">
+          <div class="section"><div class="section-label">Chapters</div>`;
+        chapters.forEach((ch, idx) => {
+          const num = ch.chapter_number ?? (idx + 1);
+          const title = ch.title ? `: ${esc(ch.title)}` : "";
+          const text = ch.text || "";
+          html += `<div class="chapter">
+            <div class="chapter-heading">
+              <div class="chapter-title">Chapter ${num}${title}</div>
+              ${text ? `<button class="copy-btn" onclick="copyChapter(this, ${idx})">Copy</button>` : ""}
+            </div>
+            ${text ? `<div class="chapter-body" data-chapter-idx="${idx}">${esc(text)}</div>` : ""}
+            ${ch.summary ? `<div class="section" style="margin-top:12px">
+              <div class="section-label">Summary</div>
+              <p>${esc(ch.summary)}</p>
+            </div>` : ""}
+          </div>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<p class="empty" style="padding:40px 0">
+          ${s.status === "completed" ? "No chapters available." :
+            s.status === "failed"    ? "Story generation failed." :
+            "Story is still being generated&hellip;"}
+        </p>`;
+      }
+
+      /* Conclusion */
+      const conc = s.conclusion;
+      if (conc) {
+        html += `<hr class="divider">
+          <div class="section">
+            <div class="section-label">Conclusion</div>`;
+        if (conc.closing_chapter_title) {
+          html += `<p><strong>Closing chapter:</strong> ${esc(conc.closing_chapter_title)}</p>`;
+        }
+        if (typeof conc.final_word_count === "number") {
+          html += `<p style="margin-top:4px"><strong>Final word count:</strong> ${conc.final_word_count}</p>`;
+        }
+        if (conc.open_threads_left && conc.open_threads_left.length) {
+          html += `<div class="section" style="margin-top:10px">
+            <div class="section-label">Open Threads</div>
+            ${bullets(conc.open_threads_left)}
+          </div>`;
+        }
+        if (conc.unresolved_cliffhangers && conc.unresolved_cliffhangers.length) {
+          html += `<div class="section" style="margin-top:10px">
+            <div class="section-label">Unresolved Cliffhangers</div>
+            ${bullets(conc.unresolved_cliffhangers)}
+          </div>`;
+        }
+        html += `</div>`;
+      }
+
+      return html;
     }
 
     /* Minimal HTML-escape */
@@ -999,23 +1172,22 @@
 
     /* ── Boot ────────────────────────────────────────────────────── */
     window.addEventListener("popstate", () => {
-      const h = location.hash;
-      if (h.startsWith("#story=")) {
-        const id = h.slice(7);
+      const parsed = parseStoryHash(location.hash);
+      if (parsed) {
         document.getElementById("page-list").classList.add("hidden");
         document.getElementById("page-detail").classList.remove("hidden");
-        loadDetail(id);
+        loadDetail(parsed.storyId, {}, parsed.source);
       } else {
         showList();
       }
     });
 
     (function boot() {
-      const h = location.hash;
-      if (h.startsWith("#story=")) {
+      const parsed = parseStoryHash(location.hash);
+      if (parsed) {
         document.getElementById("page-list").classList.add("hidden");
         document.getElementById("page-detail").classList.remove("hidden");
-        loadDetail(h.slice(7));
+        loadDetail(parsed.storyId, {}, parsed.source);
       }
       loadList();
     })();

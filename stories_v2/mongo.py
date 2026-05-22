@@ -337,3 +337,131 @@ def update_world_bible(story_id: str, fields: Dict[str, Any]) -> Optional[Dict[s
         {"$set": fields},
         return_document=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Imported-chapter helpers (used by the Import wizard)
+# ---------------------------------------------------------------------------
+
+def _scene_doc_id(story_id: str, chapter_idx: int, scene_idx: int = 0) -> str:
+    return f"{story_id}:ch{chapter_idx}:sc{scene_idx}"
+
+
+def seed_canon_chapters(
+    story_id: str,
+    chapters: List[Dict[str, Any]],
+    summaries: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Insert pasted chapters as committed scene_drafts and mirror onto the envelope.
+
+    ``chapters`` is a list of dicts shaped like ``{"title": str|None, "text": str}``
+    (e.g. ``ImportedChapter.model_dump()`` output). The envelope mirror matches
+    ``get_story_reader``'s chapter projection.
+    """
+    if not chapters:
+        return []
+    now = datetime.datetime.utcnow()
+    summaries = summaries or [""] * len(chapters)
+    scene_docs = []
+    for idx, ch in enumerate(chapters):
+        title = ch.get("title") or f"Chapter {idx + 1}"
+        text = ch.get("text") or ""
+        scene_docs.append({
+            "_id": _scene_doc_id(story_id, idx, 0),
+            "story_id": story_id,
+            "chapter_idx": idx,
+            "scene_idx": 0,
+            "title": title,
+            "final_prose": text,
+            "summary": summaries[idx] if idx < len(summaries) else "",
+            "word_count": len((text or "").split()),
+            "source": "imported",
+            "committed_at": now,
+        })
+    col(COL_SCENES).insert_many(scene_docs, ordered=False)
+
+    envelope_chapters = [
+        {
+            "chapter_number": idx + 1,
+            "chapter_idx": idx,
+            "title": d["title"],
+            "summary": d["summary"],
+            "text": d["final_prose"],
+            "word_count": d["word_count"],
+            "committed_at": now,
+            "source": "imported",
+        }
+        for idx, d in enumerate(scene_docs)
+    ]
+    update_story_envelope(story_id, {"chapters": envelope_chapters})
+    return envelope_chapters
+
+
+def backfill_imported_prose_field() -> int:
+    """One-shot migration: copy ``prose`` -> ``final_prose`` on imported scenes.
+
+    Earlier versions of ``seed_canon_chapters`` stored the imported text
+    under ``prose``, but the rest of the engine reads ``final_prose``.
+    Returns the number of docs updated.
+    """
+    result = col(COL_SCENES).update_many(
+        {
+            "source": "imported",
+            "prose": {"$exists": True},
+            "final_prose": {"$in": [None, ""]},
+        },
+        [
+            {"$set": {"final_prose": "$prose"}},
+            {"$unset": "prose"},
+        ],
+    )
+    return result.modified_count
+
+
+def update_imported_chapter(
+    story_id: str,
+    chapter_idx: int,
+    *,
+    title: Optional[str] = None,
+    text: Optional[str] = None,
+) -> bool:
+    """Edit an imported chapter pre-start. Returns True if a doc was updated.
+
+    Caller is responsible for asserting story.status == 'pending'.
+    """
+    if title is None and text is None:
+        return False
+    now = datetime.datetime.utcnow()
+    set_fields: Dict[str, Any] = {"updated_at": now}
+    if title is not None:
+        set_fields["title"] = title
+    if text is not None:
+        set_fields["final_prose"] = text
+        set_fields["word_count"] = len((text or "").split())
+
+    result = col(COL_SCENES).update_one(
+        {
+            "_id": _scene_doc_id(story_id, chapter_idx, 0),
+            "source": "imported",
+        },
+        {"$set": set_fields},
+    )
+    if result.matched_count == 0:
+        return False
+
+    # Mirror onto the envelope's chapters[] entry. We use $set with the
+    # array-positional path; matching by chapter_idx on the embedded list.
+    mirror_update: Dict[str, Any] = {}
+    if title is not None:
+        mirror_update["chapters.$[c].title"] = title
+    if text is not None:
+        mirror_update["chapters.$[c].text"] = text
+        mirror_update["chapters.$[c].word_count"] = set_fields["word_count"]
+    if mirror_update:
+        mirror_update["updated_at"] = now
+        col(COL_STORIES).update_one(
+            {"_id": story_id},
+            {"$set": mirror_update},
+            array_filters=[{"c.chapter_idx": chapter_idx, "c.source": "imported"}],
+        )
+    return True

@@ -28,7 +28,13 @@ urlpatterns = [
     path("stories/quick/", views.create_story_quick, name="v2-story-quick"),
     path("stories/deep/", views.create_story_deep, name="v2-story-deep"),
     path("stories/parse/", views.parse_pasted_view, name="v2-story-parse"),
+    path("stories/import/", views.create_story_import, name="v2-story-import"),
     path("stories/<str:story_id>/", views.get_story_reader, name="v2-story-detail"),
+    path(
+        "stories/<str:story_id>/imported-chapter/<int:chapter_idx>/",
+        views.patch_imported_chapter_view,
+        name="v2-story-imported-chapter-patch",
+    ),
     path("stories/<str:story_id>/start/", views.start_story_view, name="v2-story-start"),
     path("stories/<str:story_id>/continue/", views.continue_story_view, name="v2-story-continue"),
     path("stories/<str:story_id>/stream/", views.stream_story_events, name="v2-story-stream"),

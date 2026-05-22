@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .character import CharacterRelationship
 from .common import CharacterTier
@@ -163,3 +163,63 @@ class ParsedSurveyDraft(BaseModel):
     arc_preferences: Optional[DeepArcPreferences] = None
     style_anchors: Optional[DeepStyleAnchors] = None
     notes: List[str] = Field(default_factory=list, description="Parser notes / caveats to show the user.")
+
+
+# ---------------------------------------------------------------------------
+# Import-past-chapters intake
+# ---------------------------------------------------------------------------
+
+class ImportedChapter(BaseModel):
+    """One pasted prior chapter that becomes canon for the new story."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, max_length=300)
+    text: str = Field(min_length=50, max_length=200_000)
+
+
+class ImportSurvey(BaseModel):
+    """Import-past-chapters intake: canon prose + continuation brief + profile choice.
+
+    The pasted chapters become the story-so-far (chapters 1..N). The engine
+    generates ``chapters_to_generate`` new chapters from N+1 onward. If
+    ``end_story`` is True, the last generated chapter is written as a finale
+    and the story is marked completed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, max_length=300)
+    chapters: List[ImportedChapter] = Field(min_length=1, max_length=100)
+    description: str = Field(
+        min_length=20,
+        max_length=20_000,
+        description="How the story should go from chapter N+1 onward.",
+    )
+    chapters_to_generate: int = Field(ge=1, le=200)
+    end_story: bool = False
+
+    profile_mode: Literal["select", "generate"]
+    profile_id: Optional[str] = None          # when profile_mode == "select"
+    new_profile_name: Optional[str] = Field(default=None, max_length=200)
+    new_profile_bio: Optional[str] = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def _check_profile_mode_fields(self) -> "ImportSurvey":
+        if self.profile_mode == "select":
+            if not self.profile_id:
+                raise ValueError("profile_id is required when profile_mode == 'select'.")
+            if self.new_profile_name or self.new_profile_bio:
+                raise ValueError(
+                    "new_profile_name / new_profile_bio must be empty when profile_mode == 'select'."
+                )
+        else:  # profile_mode == "generate"
+            if not (self.new_profile_name or "").strip():
+                raise ValueError(
+                    "new_profile_name is required when profile_mode == 'generate'."
+                )
+            if self.profile_id:
+                raise ValueError(
+                    "profile_id must be empty when profile_mode == 'generate'."
+                )
+        return self

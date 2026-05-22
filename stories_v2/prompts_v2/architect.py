@@ -72,6 +72,7 @@ def build_user_prompt(
     world_bible: Optional[Dict[str, Any]] = None,
     cast: Optional[List[Dict[str, Any]]] = None,
     arc_preferences: Optional[Dict[str, Any]] = None,
+    continuation_brief: Optional[str] = None,
 ) -> str:
     parts = [
         f"Title: {title}",
@@ -81,6 +82,12 @@ def build_user_prompt(
         f"POV: {pov}",
         f"Chapter count: {num_chapters} (indices 0..{num_chapters - 1})",
     ]
+    if continuation_brief and continuation_brief.strip():
+        parts.append(
+            "AUTHOR'S CONTINUATION BRIEF — what the user wants to happen across these chapters "
+            "(use this to anchor milestones, plot_seeds, and the cliffhanger pattern):\n"
+            + continuation_brief.strip()
+        )
     if world_bible:
         parts.append(
             "World bible (respect rules + factions + system):\n"

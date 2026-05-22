@@ -43,10 +43,29 @@ class OpenAICompatClient(ChatClient):
         self._api_key = api_key
         self._embed_path = embed_path
         self._client: Optional[httpx.AsyncClient] = None
+        # The event loop the client's connection pool was bound to. If the
+        # current loop differs (asgiref.async_to_sync makes a fresh loop per
+        # top-level sync call, so DRF views routinely cross loops), the cached
+        # client raises "Event loop is closed" on the next use. We detect that
+        # here and rebuild lazily.
+        self._client_loop: Optional[asyncio.AbstractEventLoop] = None
 
     def _ensure(self) -> httpx.AsyncClient:
         if not self._api_key:
             raise ConfigError(f"{self.name}: API key is not configured")
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if (
+            self._client is not None
+            and self._client_loop is not None
+            and self._client_loop is not current_loop
+        ):
+            # Old client was bound to a now-closed loop. Abandon it (we can't
+            # safely aclose() on a dead loop) and rebuild.
+            self._client = None
+            self._client_loop = None
         if self._client is None:
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
@@ -56,6 +75,7 @@ class OpenAICompatClient(ChatClient):
                 },
                 timeout=httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=30.0),
             )
+            self._client_loop = current_loop
         return self._client
 
     # -- helpers -------------------------------------------------------------
@@ -93,11 +113,19 @@ class OpenAICompatClient(ChatClient):
         timeout: float = 90.0,
     ) -> str:
         client = self._ensure()
-        body = {
+        body: Dict[str, Any] = {
             "model": model_id,
             "messages": self._build_messages(system=system, messages=messages),
             "temperature": temperature,
             "max_tokens": max_tokens,
+            # Suppress the reasoning track on reasoning-capable models. Many
+            # Together-hosted models (Kimi K2.5, gpt-oss-120b, DeepSeek-R1)
+            # otherwise spend most of max_tokens on a hidden chain of
+            # thought and return ``content: ""`` with finish_reason=length.
+            # Unknown params are silently passed-through by Together, so
+            # this is safe on models that don't support reasoning.
+            "reasoning_effort": "low",
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         try:
             resp = await client.post("/chat/completions", json=body, timeout=timeout)
@@ -108,9 +136,30 @@ class OpenAICompatClient(ChatClient):
         self._raise_from_response(resp)
         data = resp.json()
         try:
-            return data["choices"][0]["message"]["content"]
+            message = data["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError(f"{self.name}: malformed response {data!r}") from exc
+
+        content = (message.get("content") or "").strip()
+        if content:
+            return message["content"]
+        # Reasoning-model fallback: if the model exhausted its budget on the
+        # thinking track and content came back empty, the next-best signal
+        # is the reasoning trace itself (often it dictates the prose verbatim
+        # before being cut off). Better than returning "".
+        for fallback_key in ("reasoning", "reasoning_content"):
+            fallback = (message.get(fallback_key) or "").strip()
+            if fallback:
+                logger.warning(
+                    "%s: empty content for %s; falling back to '%s' (%d chars, finish=%s)",
+                    self.name, model_id, fallback_key, len(fallback),
+                    data["choices"][0].get("finish_reason"),
+                )
+                return fallback
+        raise ProviderError(
+            f"{self.name}: empty content and no reasoning fallback "
+            f"(finish_reason={data['choices'][0].get('finish_reason')!r})"
+        )
 
     async def chat_json(
         self,
@@ -130,6 +179,11 @@ class OpenAICompatClient(ChatClient):
             "temperature": temperature,
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
+            # Same reasoning-suppression as chat_text — JSON-mode calls
+            # have small output budgets and shouldn't burn them on a
+            # hidden chain of thought.
+            "reasoning_effort": "low",
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         try:
             resp = await client.post("/chat/completions", json=body, timeout=timeout)
@@ -140,9 +194,28 @@ class OpenAICompatClient(ChatClient):
         self._raise_from_response(resp)
         data = resp.json()
         try:
-            raw = data["choices"][0]["message"]["content"]
+            message = data["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError(f"{self.name}: malformed response {data!r}") from exc
+
+        raw = (message.get("content") or "").strip()
+        if not raw:
+            # JSON content was empty (reasoning ate the budget). Try the
+            # reasoning trace; sometimes it contains an embedded JSON blob.
+            for fallback_key in ("reasoning", "reasoning_content"):
+                fallback = (message.get(fallback_key) or "").strip()
+                if fallback:
+                    logger.warning(
+                        "%s: empty JSON content for %s; trying '%s' (%d chars)",
+                        self.name, model_id, fallback_key, len(fallback),
+                    )
+                    raw = fallback
+                    break
+            if not raw:
+                raise ProviderError(
+                    f"{self.name}: empty JSON content "
+                    f"(finish_reason={data['choices'][0].get('finish_reason')!r})"
+                )
 
         try:
             parsed = json.loads(raw)

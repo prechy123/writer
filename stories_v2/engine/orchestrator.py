@@ -143,6 +143,7 @@ async def _run_story_inner(story: Dict[str, Any], *, batch_size: Optional[int]) 
             if c.get("summary")
         ) or None
         open_threads = ((story_now.get("continuity_ledger") or {}).get("open_threads") or [])[-12:]
+        continuation_brief = (story_now.get("continuation_brief") or "").strip() or None
 
         try:
             await run_chapter(
@@ -155,6 +156,7 @@ async def _run_story_inner(story: Dict[str, Any], *, batch_size: Optional[int]) 
                 recent_summary=recent_summary,
                 open_threads=open_threads,
                 author_profile_hint=author_profile_hint,
+                continuation_brief=continuation_brief,
             )
         except Exception as exc:
             logger.exception("orchestrator: chapter %s failed for %s", chapter_idx, story_id)
@@ -227,6 +229,8 @@ async def _get_or_build_arc(
     if isinstance(deep, dict):
         arc_preferences = deep.get("arc_preferences")
 
+    continuation_brief = (story.get("continuation_brief") or "").strip() or None
+
     arc = await build_arc_plan(
         story_id=story_id,
         title=quick.title,
@@ -238,6 +242,7 @@ async def _get_or_build_arc(
         world_bible=world,
         cast=cast_docs,
         arc_preferences=arc_preferences,
+        continuation_brief=continuation_brief,
     )
     mongo.update_story_envelope(story_id, {"arc_plan": arc.model_dump()})
     return arc

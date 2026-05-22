@@ -51,8 +51,15 @@ def build_user_prompt(
     semantic_context: Dict[str, Any],
     episodic_excerpts: List[Dict[str, Any]],
     author_profile_hint: Optional[Dict[str, Any]] = None,
+    continuation_brief: Optional[str] = None,
 ) -> str:
     parts: List[str] = []
+
+    if continuation_brief and continuation_brief.strip():
+        parts.append(
+            "=== AUTHOR'S CONTINUATION BRIEF (overall plot intent across upcoming chapters) ===\n"
+            + continuation_brief.strip()
+        )
 
     parts.append("=== SCENE BEAT ===\n" + json.dumps(_compact_beat(scene_beat), indent=2, default=str))
 

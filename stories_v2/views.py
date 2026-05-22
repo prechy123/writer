@@ -43,6 +43,7 @@ from . import mongo
 from .agents import (
     build_profile,
     build_world_bible,
+    extract_continuity_from_imported,
     forge_cast,
     parse_pasted_notes,
 )
@@ -59,16 +60,18 @@ from .schemas_v2 import (
     DeepCharacter,
     DeepSurvey,
     DeepWorld,
+    ImportSurvey,
     ProfileV2,
     ProfileV2Input,
     QuickSurvey,
     StoryStatus,
     character_budget_for,
 )
-from .schemas_v2.survey import PastedNotes
+from .schemas_v2.survey import ParsedSurveyDraft, PastedNotes
 from .serializers import (
     CharacterBiblePatchSerializer,
     DeepSurveySerializer,
+    ImportSurveySerializer,
     PastedNotesSerializer,
     ProfileGenerateSerializer,
     QuickSurveySerializer,
@@ -391,6 +394,441 @@ def create_story_deep(request):
     )
 
 
+# ---------------------------------------------------------------------------
+# Import-past-chapters wizard
+# ---------------------------------------------------------------------------
+
+_VOICE_SAMPLE_MAX_CHARS = 10_000
+_VOICE_SAMPLE_MAX_COUNT = 8
+
+
+def _select_voice_samples(chapters: List[Dict[str, Any]]) -> List[str]:
+    """Pick representative passages from imported chapters for voice training.
+
+    Strategy: take the last 1–2 paragraphs of each chapter (typically the
+    most emotionally charged), cap to 8 samples and ~10K total chars.
+    """
+    samples: List[str] = []
+    for ch in chapters:
+        text = (ch.get("text") or "").strip()
+        if not text:
+            continue
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if not paragraphs:
+            paragraphs = [text]
+        tail = paragraphs[-2:] if len(paragraphs) >= 2 else paragraphs
+        sample = "\n\n".join(tail).strip()
+        if sample:
+            samples.append(sample)
+
+    # Cap by count first (keep most recent — usually the strongest voice).
+    if len(samples) > _VOICE_SAMPLE_MAX_COUNT:
+        samples = samples[-_VOICE_SAMPLE_MAX_COUNT:]
+    # Then by total characters, dropping oldest until under cap.
+    while samples and sum(len(s) for s in samples) > _VOICE_SAMPLE_MAX_CHARS:
+        samples.pop(0)
+    return samples
+
+
+def _build_import_envelope(
+    *,
+    story_id: str,
+    quick: QuickSurvey,
+    deep: DeepSurvey,
+    imported_chapter_count: int,
+    continuation_brief: str,
+    end_story: bool,
+    continuity_ledger: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Story envelope for the Import wizard. Like ``_build_initial_envelope``
+    but with imported chapters as committed canon and the engine pointed at N+1.
+    """
+    now = datetime.datetime.utcnow()
+    progress = {
+        "stage": "queued",
+        "message": (
+            f"{imported_chapter_count} chapter(s) imported as canon. "
+            "Bibles built; awaiting generation engine."
+        ),
+        "percent": 0,
+        "completed_chapters": imported_chapter_count,
+        "total_chapters": quick.num_chapters,
+        "updated_at": now,
+    }
+    return {
+        "_id": story_id,
+        "title": quick.title,
+        "status": StoryStatus.PENDING.value,
+        "quick_survey": quick.model_dump(),
+        "deep_survey": deep.model_dump(),
+        "arc_plan": None,
+        "chapters": [],          # filled by mongo.seed_canon_chapters
+        "current_chapter_idx": imported_chapter_count,
+        "current_scene_idx": 0,
+        "progress": progress,
+        "progress_log": [progress],
+        "created_at": now,
+        "updated_at": now,
+        "hidden": False,
+        "character_budget": character_budget_for(quick.num_chapters),
+        # Engine-facing extras (Phase 8+ reads these):
+        "continuation_brief": continuation_brief,
+        "end_story_next_batch": bool(end_story),
+        "continuity_ledger": continuity_ledger,
+        "imported_chapter_count": imported_chapter_count,
+    }
+
+
+@api_view(["POST"])
+def create_story_import(request):
+    """POST /api/v2/stories/import/
+
+    Import N past chapters as canon + a continuation brief + chapters_to_generate.
+    Either references an existing profile or generates one from the chapters.
+    Returns the new ``story_id`` so the frontend can route to ``#/stories/<id>/bibles``.
+    """
+    serializer = ImportSurveySerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    survey: ImportSurvey = serializer.pydantic
+
+    chapter_dicts: List[Dict[str, Any]] = [c.model_dump() for c in survey.chapters]
+    imported_count = len(chapter_dicts)
+    voice_samples = _select_voice_samples(chapter_dicts)
+
+    # ---- Validate profile selection BEFORE we do any LLM work ----------------
+    if survey.profile_mode == "select":
+        if not mongo.get_profile(survey.profile_id or ""):
+            return Response(
+                {"detail": "profile_id does not match any existing profile."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # ---- Build the combined text once + parser hint --------------------------
+    combined_text_parts: List[str] = []
+    for i, ch in enumerate(chapter_dicts):
+        title = ch.get("title") or f"Chapter {i + 1}"
+        combined_text_parts.append(f"--- {title} ---\n{ch.get('text') or ''}")
+    combined_text_parts.append("--- AUTHOR'S CONTINUATION BRIEF ---\n" + survey.description)
+    combined = "\n\n".join(combined_text_parts)
+    parser_hint = (
+        f"Above are {imported_count} prior chapter(s) of a story, followed by the "
+        "author's brief for what should happen in the upcoming chapters. Extract "
+        "characters, world, arc preferences. Treat the chapters as canon."
+    )
+
+    # ---- Run ALL agent calls in a single asyncio loop (asgiref's
+    # async_to_sync closes its loop after each top-level call, which can
+    # invalidate provider HTTP clients held across calls — composing into one
+    # coroutine sidesteps that AND lets independent agents run in parallel).
+    async def _run_agents() -> Dict[str, Any]:
+        import asyncio
+        tasks: Dict[str, Any] = {
+            "parsed": parse_pasted_notes(
+                PastedNotes(raw_text=combined[:200_000], hint=parser_hint)
+            ),
+            "continuity": extract_continuity_from_imported(chapter_dicts),
+        }
+        if survey.profile_mode == "generate":
+            tasks["profile"] = build_profile(
+                ProfileV2Input(
+                    name=(survey.new_profile_name or "").strip(),
+                    bio_context=(survey.new_profile_bio or "").strip(),
+                    writing_samples=voice_samples,
+                )
+            )
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        return dict(zip(tasks.keys(), results))
+
+    try:
+        agent_results = async_to_sync(_run_agents)()
+    except Exception as exc:
+        logger.exception("import: agent batch failed")
+        return Response(
+            {"ok": False, "error": f"agent batch failed: {type(exc).__name__}: {exc}"},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    parsed_result = agent_results.get("parsed")
+    if isinstance(parsed_result, Exception):
+        logger.warning("import: paste parser failed (%s)", parsed_result)
+        # Fall through with an empty parse — bibles will be sparse but the
+        # canon chapters are still seeded.
+        parsed = ParsedSurveyDraft(notes=[f"Parser unavailable: {parsed_result}"])
+    else:
+        parsed = parsed_result  # type: ignore[assignment]
+
+    # ---- Resolve the profile (after agents have run) -------------------------
+    resolved_profile_id: Optional[str] = None
+    if survey.profile_mode == "select":
+        resolved_profile_id = survey.profile_id
+    else:
+        prof_result = agent_results.get("profile")
+        if isinstance(prof_result, Exception):
+            logger.exception("import: profile generation failed", exc_info=prof_result)
+            return Response(
+                {"ok": False, "error": f"profile generation failed: {type(prof_result).__name__}: {prof_result}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        profile_input = ProfileV2Input(
+            name=(survey.new_profile_name or "").strip(),
+            bio_context=(survey.new_profile_bio or "").strip(),
+            writing_samples=voice_samples,
+        )
+        new_profile_id = str(uuid.uuid4())
+        profile = ProfileV2(
+            profile_id=new_profile_id,
+            name=profile_input.name,
+            inputs=profile_input,
+            lexical_fingerprint=prof_result["lexical_fingerprint"],
+            emotional_defaults=prof_result["emotional_defaults"],
+            preferred_phrases=prof_result["preferred_phrases"],
+            banned_phrases=prof_result["banned_phrases"],
+            few_shot_samples=prof_result["few_shot_samples"] or voice_samples,
+            expertise_tags=prof_result["expertise_tags"],
+        )
+        mongo.insert_profile({"_id": new_profile_id, **profile.model_dump()})
+        resolved_profile_id = new_profile_id
+
+    parsed_notes = list(parsed.notes or [])
+
+    # ---- Build Quick + Deep surveys from the parser output -------------------
+    parsed_quick = parsed.quick
+    title = (survey.title or "").strip()
+    if not title:
+        title = (parsed_quick.title if parsed_quick and parsed_quick.title else "(Imported story)")
+
+    premise = ""
+    if parsed_quick and parsed_quick.premise:
+        premise = parsed_quick.premise
+    if not premise:
+        premise = survey.description[:400]
+
+    total_chapters = imported_count + survey.chapters_to_generate
+
+    # Quick — derive from parsed_quick when available, else conservative defaults.
+    quick_kwargs: Dict[str, Any] = {
+        "title": title,
+        "premise": premise,
+        "num_chapters": total_chapters,
+        "initial_chapters": survey.chapters_to_generate,
+        "profile_id": resolved_profile_id,
+    }
+    if parsed_quick:
+        if parsed_quick.genres:
+            quick_kwargs["genres"] = parsed_quick.genres
+        if parsed_quick.tone:
+            quick_kwargs["tone"] = parsed_quick.tone
+        if parsed_quick.pov:
+            quick_kwargs["pov"] = parsed_quick.pov
+        if parsed_quick.tense:
+            quick_kwargs["tense"] = parsed_quick.tense
+        if parsed_quick.target_chapter_words:
+            quick_kwargs["target_chapter_words"] = parsed_quick.target_chapter_words
+    try:
+        quick = QuickSurvey(**quick_kwargs)
+    except Exception as exc:
+        return Response(
+            {"detail": "Failed to build derived QuickSurvey.", "error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Deep — start from parsed bibles, then mirror our voice samples into
+    # style_anchors so the writer agent always sees them at draft time.
+    deep_payload: Dict[str, Any] = {
+        "quick": quick.model_dump(),
+        "characters": [c.model_dump() for c in parsed.characters] if parsed.characters else [],
+        "world": parsed.world.model_dump() if parsed.world else {},
+        "arc_preferences": parsed.arc_preferences.model_dump() if parsed.arc_preferences else {},
+        "style_anchors": parsed.style_anchors.model_dump() if parsed.style_anchors else {
+            "reference_authors": [],
+            "reference_books": [],
+            "pasted_sample_passages": [],
+        },
+    }
+    # Merge voice samples into pasted_sample_passages without exploding past
+    # any reasonable size. Dedupe by exact match.
+    existing_passages = list(deep_payload["style_anchors"].get("pasted_sample_passages") or [])
+    for s in voice_samples:
+        if s not in existing_passages:
+            existing_passages.append(s)
+    deep_payload["style_anchors"]["pasted_sample_passages"] = existing_passages
+
+    try:
+        deep = DeepSurvey.model_validate(deep_payload)
+    except Exception as exc:
+        return Response(
+            {"detail": "Failed to build derived DeepSurvey.", "error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ---- Continuity-extraction (already ran inside _run_agents) --------------
+    continuity_result = agent_results.get("continuity")
+    if isinstance(continuity_result, Exception) or not isinstance(continuity_result, dict):
+        if isinstance(continuity_result, Exception):
+            logger.warning("import: continuity extraction failed (%s)", continuity_result)
+        continuity = {
+            "chapter_summaries": [""] * imported_count,
+            "open_threads": [],
+            "latest_cliffhanger": None,
+            "character_moods": {},
+        }
+    else:
+        continuity = continuity_result
+    continuity_ledger = {
+        "open_threads": continuity.get("open_threads") or [],
+        "latest_cliffhanger": continuity.get("latest_cliffhanger"),
+        "unresolved_cliffhangers": [],
+    }
+
+    # ---- Build + persist envelope -------------------------------------------
+    story_id = str(uuid.uuid4())
+    envelope = _build_import_envelope(
+        story_id=story_id,
+        quick=quick,
+        deep=deep,
+        imported_chapter_count=imported_count,
+        continuation_brief=survey.description,
+        end_story=survey.end_story,
+        continuity_ledger=continuity_ledger,
+    )
+    mongo.insert_story_envelope(envelope)
+
+    # Seed canon chapters into scene_drafts + envelope.chapters[].
+    try:
+        mongo.seed_canon_chapters(
+            story_id,
+            chapter_dicts,
+            summaries=continuity.get("chapter_summaries"),
+        )
+    except Exception as exc:
+        logger.exception("import: seed_canon_chapters failed")
+        return Response(
+            {"ok": False, "error": f"seeding canon chapters failed: {type(exc).__name__}: {exc}"},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    # Persist bibles — reuse the same path as Deep wizard.
+    try:
+        bibles = _persist_bibles(story_id=story_id, quick=quick, deep=deep)
+    except Exception as exc:
+        logger.exception("import: bible build failed")
+        mongo.update_story_envelope(
+            story_id,
+            {
+                "status": StoryStatus.FAILED.value,
+                "progress": {"stage": "failed", "error": str(exc)},
+            },
+        )
+        return Response(
+            {"story_id": story_id, "ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    # Apply per-character mood snapshots from the continuity pass.
+    # CharacterMoodSnapshot has extra="forbid" — pass it through the schema
+    # so we never write unknown fields the engine would reject at re-validate.
+    from .schemas_v2 import CharacterMoodSnapshot, PlutchikVector, SceneEmotionAxes
+
+    character_moods = continuity.get("character_moods") or {}
+    if character_moods:
+        cast = mongo.list_character_bibles(story_id)
+        name_to_id = {(c.get("name") or "").lower(): c.get("character_id") for c in cast}
+        for raw_name, mood in character_moods.items():
+            char_id = name_to_id.get((raw_name or "").lower())
+            if not char_id or not isinstance(mood, dict):
+                continue
+            try:
+                valence = float(mood.get("valence", 0.0))
+                arousal = float(mood.get("arousal", 0.5))
+            except (TypeError, ValueError):
+                continue
+            snapshot = CharacterMoodSnapshot(
+                chapter_idx=max(0, imported_count - 1),
+                scene_idx=0,
+                plutchik=PlutchikVector(),  # zeros — we only got valence/arousal
+                axes=SceneEmotionAxes(
+                    valence=max(-1.0, min(1.0, valence)),
+                    arousal=max(0.0, min(1.0, arousal)),
+                ),
+                last_event_summary=str(mood.get("summary") or "")[:500],
+            )
+            mongo.col(mongo.COL_CHARACTERS).update_one(
+                {"story_id": story_id, "character_id": char_id},
+                {"$push": {"mood_state_history": snapshot.model_dump()}},
+            )
+
+    return Response(
+        {
+            "ok": True,
+            "story_id": story_id,
+            "profile_id": resolved_profile_id,
+            "status": StoryStatus.PENDING.value,
+            "chapters_imported": imported_count,
+            "num_chapters_total": total_chapters,
+            "bibles": bibles,
+            "parsed_notes": parsed_notes,
+            "continuity_summary": {
+                "open_threads_count": len(continuity_ledger["open_threads"]),
+                "has_cliffhanger": bool(continuity_ledger["latest_cliffhanger"]),
+                "moods_captured": len(character_moods),
+            },
+            "note": (
+                "Bibles + canon chapters persisted. Review bibles, then call "
+                "/api/v2/stories/<id>/start/ to begin generating chapter "
+                f"{imported_count + 1} onward."
+            ),
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["PATCH"])
+def patch_imported_chapter_view(request, story_id: str, chapter_idx: int):
+    """PATCH /api/v2/stories/<id>/imported-chapter/<idx>/
+
+    Allows the user to edit an imported chapter from the bible-review page
+    BEFORE clicking Start. Once the story has been started the chapter
+    becomes immutable from this endpoint (use the scene-level edit
+    endpoint instead for fine-grained edits during/after generation).
+    """
+    story = mongo.get_story_envelope(story_id)
+    if not story:
+        return Response({"detail": "Story not found."}, status=status.HTTP_404_NOT_FOUND)
+    if story.get("status") != StoryStatus.PENDING.value:
+        return Response(
+            {"detail": "Imported chapters can only be edited before the story has been started."},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    data = request.data if isinstance(request.data, dict) else {}
+    title = data.get("title")
+    text = data.get("text")
+    if title is None and text is None:
+        return Response(
+            {"detail": "Provide at least one of 'title' or 'text'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if text is not None and len(str(text)) < 50:
+        return Response(
+            {"detail": "Chapter text must be at least 50 characters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    updated = mongo.update_imported_chapter(
+        story_id,
+        int(chapter_idx),
+        title=str(title) if title is not None else None,
+        text=str(text) if text is not None else None,
+    )
+    if not updated:
+        return Response(
+            {"detail": "No imported chapter at that index for this story."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response({"ok": True, "story_id": story_id, "chapter_idx": int(chapter_idx)})
+
+
 @api_view(["GET"])
 def list_stories_view(request):
     """List stories with a slim summary (no full prose)."""
@@ -443,14 +881,16 @@ def get_story_reader(request, story_id: str):
 
     # Chapters — already stored on the story envelope as a list of dicts
     chapters = []
-    for ch in (story.get("chapters") or []):
+    for idx, ch in enumerate(story.get("chapters") or []):
         chapters.append({
-            "chapter_number": ch.get("chapter_number") or (ch.get("chapter_idx", 0) + 1),
+            "chapter_number": ch.get("chapter_number") or (ch.get("chapter_idx", idx) + 1),
+            "chapter_idx": ch.get("chapter_idx", idx),
             "title": ch.get("title"),
             "summary": ch.get("summary"),
             "text": ch.get("text"),
             "word_count": ch.get("word_count"),
             "committed_at": ch.get("committed_at"),
+            "source": ch.get("source"),
         })
 
     # Conclusion — populated when status == completed
@@ -466,6 +906,7 @@ def get_story_reader(request, story_id: str):
             "unresolved_cliffhangers": ledger.get("unresolved_cliffhangers") or [],
         }
 
+    quick = story.get("quick_survey") or {}
     return Response({
         "story_id": story_id,
         "title": story.get("title"),
@@ -477,6 +918,14 @@ def get_story_reader(request, story_id: str):
         "characters": visible_cast,
         "chapters": chapters,
         "conclusion": conclusion,
+        # Slim quick_survey fields the SPA needs (profile swap, dialogs).
+        "quick_survey": {
+            "profile_id": quick.get("profile_id"),
+            "num_chapters": quick.get("num_chapters"),
+            "initial_chapters": quick.get("initial_chapters"),
+        },
+        "imported_chapter_count": story.get("imported_chapter_count") or 0,
+        "end_story_next_batch": bool(story.get("end_story_next_batch")),
     })
 
 
@@ -867,6 +1316,15 @@ def continue_story_view(request, story_id: str):
     """POST /api/v2/stories/<story_id>/continue/
 
     Resumes generation from current_chapter_idx for one more batch.
+
+    Body (all optional):
+        additional_chapters: int   — batch size for this continue
+        end_story:           bool  — if true, the engine treats this batch as a
+                                     finale (last chapter resolves arcs + sets
+                                     status=completed). Persisted on the
+                                     envelope so the Phase 8+ engine can read it.
+        profile_id:          str   — swap the story's narrative-voice profile
+                                     starting from this batch.
     """
     story = mongo.get_story_envelope(story_id)
     if not story:
@@ -879,22 +1337,44 @@ def continue_story_view(request, story_id: str):
             status=status.HTTP_409_CONFLICT,
         )
 
-    total = int(story.get("quick_survey", {}).get("num_chapters", 0) or 0)
+    body = request.data if isinstance(request.data, dict) else {}
+    quick = story.get("quick_survey", {}) or {}
+    total = int(quick.get("num_chapters", 0) or 0)
     starting = int(story.get("current_chapter_idx") or 0)
-    if starting >= total:
-        return Response(
-            {"detail": "All chapters already written."},
-            status=status.HTTP_409_CONFLICT,
-        )
 
-    additional = (request.data or {}).get("additional_chapters")
+    # Batch size — defaults to 3, grows the total if the user wants more than
+    # the original plan allowed (Improvement B from the plan).
+    additional = body.get("additional_chapters")
     try:
         batch = int(additional) if additional is not None else None
     except (TypeError, ValueError):
         batch = None
     if batch is None:
-        batch = min(3, total - starting)
-    batch = max(1, min(batch, total - starting))
+        batch = max(1, min(3, total - starting)) if total > starting else 3
+    batch = max(1, batch)
+
+    envelope_updates: Dict[str, Any] = {}
+    new_total = max(total, starting + batch)
+    if new_total != total:
+        envelope_updates["quick_survey.num_chapters"] = new_total
+
+    # Optional profile swap.
+    new_profile_id = body.get("profile_id")
+    if new_profile_id and new_profile_id != quick.get("profile_id"):
+        if not mongo.get_profile(new_profile_id):
+            return Response(
+                {"detail": "profile_id does not match any existing profile."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        envelope_updates["quick_survey.profile_id"] = new_profile_id
+
+    # Optional end-story flag.
+    end_story = body.get("end_story")
+    if end_story is not None:
+        envelope_updates["end_story_next_batch"] = bool(end_story)
+
+    if envelope_updates:
+        mongo.update_story_envelope(story_id, envelope_updates)
 
     launch_story_run(story_id, batch_size=batch)
     return Response(
@@ -904,6 +1384,9 @@ def continue_story_view(request, story_id: str):
             "status": "queued",
             "batch_size": batch,
             "starting_chapter_idx": starting,
+            "num_chapters_total": new_total,
+            "end_story_next_batch": bool(end_story) if end_story is not None else bool(story.get("end_story_next_batch")),
+            "profile_id": envelope_updates.get("quick_survey.profile_id", quick.get("profile_id")),
         },
         status=status.HTTP_202_ACCEPTED,
     )

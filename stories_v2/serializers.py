@@ -19,6 +19,7 @@ from rest_framework import serializers
 
 from .schemas_v2 import (
     DeepSurvey,
+    ImportSurvey,
     PastedNotes,
     ProfileV2Input,
     QuickSurvey,
@@ -58,6 +59,10 @@ class DeepSurveySerializer(_PydanticPassthroughSerializer):
 
 class PastedNotesSerializer(_PydanticPassthroughSerializer):
     pydantic_model = PastedNotes
+
+
+class ImportSurveySerializer(_PydanticPassthroughSerializer):
+    pydantic_model = ImportSurvey
 
 
 class CharacterBiblePatchSerializer(serializers.Serializer):
